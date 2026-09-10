@@ -1,0 +1,4 @@
+interface:
+  display_name: "Underwater Photo Processing"
+  short_description: "Correct dive photos, clean water noise, export PNGs"
+  default_prompt: "Use $underwater-photo-processing to correct and refine my underwater photos with the current treatment."
