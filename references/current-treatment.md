@@ -1,13 +1,14 @@
 # Current treatment and observed feedback
 
-Updated: 2026-09-10. This is a maintained working recipe, not a calibrated camera
+Updated: 2026-09-11. This is a maintained working recipe, not a calibrated camera
 profile or a universally appropriate underwater look.
 
 ## Approved baseline
 
-The V3 vivid treatment, retaining V2 cleanup, is the maintainer-approved default
-as of 2026-09-10. It combines lossless PNG output, conservative cleanup, and
-visibly stronger color. Earlier presets remain available for a subtler look.
+The V4 vivid treatment is the maintainer-approved default as of 2026-09-11. It
+keeps V2 cleanup and V3 chroma, then reduces residual underwater green cast.
+Earlier presets and `work/batch_output_v3` remain available for comparison.
+Processed batches belong under gitignored `work/`.
 
 ## Source observations
 
@@ -29,7 +30,7 @@ misorienting output. Actual sensor-RAW development is a future enhancement.
 Initial correction estimates low-texture upper-corner ambient color, with the
 veil capped by 7% of that estimate and 38% of the per-channel fifth percentile.
 Soft subtraction avoids hard shadow clipping. Adaptive red supplementation is
-0.20 times the surviving green/red difference, reduced in highlights. Trimmed
+0.28 times the surviving green/red difference, reduced in highlights. Trimmed
 Shades of Gray uses p=4 in linearized RGB. LAB L-channel CLAHE uses clip limit
 1.6, grid 12 x 8, blended at 50%. Clipped cyan highlights receive chroma
 suppression to prevent pink patches. Common-channel highlight rolloff avoids
@@ -46,23 +47,25 @@ sigmaSpace 2; chroma uses diameter 7, sigmaColor 3.5, sigmaSpace 3. A modest
 adaptive black offset, S curve, and thresholded local contrast add definition.
 Its vibrance multiplier `1 + 0.24 * exp(-C/35)` is the subtler `pop` option.
 
-Third pass completed all 26 files (1.62 GB), with zero measured output highlight
-clipping and a batch median colored-pixel chroma ratio of 1.79 versus V2. The
-standalone skill runner reproduced DSC_1565's V3 output pixels exactly from its
-NEF and preserved the capture date and profile. This treatment was visually
-approved by the maintainer on 2026-09-10.
-
-Third pass builds on the actual second-pass pixels. It increases LAB chroma by
+Third pass increases LAB chroma by
 `1 + 0.95 * (1 - exp(-(C/6)^2)) * exp(-C/120)`, tapering for bright near-neutral
-whites and applying gamut/highlight handling afterward. This is approximately
-a 70-80% measured chroma increase over V2 in the tested colored regions, rather
-than a literal 70-80% saturation-slider setting. Do not boost channel means or
-invent object hues simply to make an image colorful. Preserve V2's cleanup.
+whites. Residual green (`a < 0`) is amplified at 40% of that gain so vivid does
+not reintroduce water cast. Gamut/highlight handling follows.
+
+Fourth pass (`reduce_green_cast`) measures remaining cast from bright
+near-neutrals (midtone neutrals if whites are scarce), shifts toward a mild
+magenta-neutral white target (`a ≈ 2.2`), warms olive midtones toward brown, and
+rotates lime HSV hues toward golden yellow. Strength scales with measured green
+in neutrals so already-balanced frames are nudged lightly.
+
+Maintainer review on 2026-09-11 preferred V4 over V3 for residual green on
+representative frames (DSC_1565, DSC_1511, DSC_1578, DSC_1539). Keep V3 outputs
+for comparison unless the user requests removal.
 
 ## How to update this reference
 
-Use V3 vivid as the approved baseline. If the user requests a subtler/stronger look
-or different cleanup, revise the helper,
-validate representative images, and update these settings. Do not claim visual
-approval based solely on numerical checks. Keep earlier outputs available for
-comparison unless the user requests removal.
+Use V4 vivid as the approved baseline. If the user requests a subtler/stronger
+look or different cleanup, revise the helper, validate representative images,
+and update these settings. Do not claim visual approval based solely on
+numerical checks. Keep earlier outputs available for comparison unless the user
+requests removal.

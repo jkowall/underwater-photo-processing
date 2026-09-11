@@ -32,7 +32,8 @@ def estimate(rgb):
     # additive veil by a fraction of the dark tail, avoiding crushed shadows.
     veil = np.minimum(.07*ambient, .38*floor).astype(np.float32)
     base = x*x/(x+veil+1e-8)
-    r0 = restore_red(base)
+    red_strength=.28
+    r0 = restore_red(base, red_strength)
     lum = r0 @ np.array([.2126,.7152,.0722],np.float32)
     valid = (lum>np.percentile(lum,10)) & (lum<np.percentile(lum,98))
     if not np.any(valid):
@@ -43,14 +44,14 @@ def estimate(rgb):
     gains = np.clip(gains,.4,12).astype(np.float32)
     return {'ambient_linear_RGB':ambient.tolist(), 'veil_linear_RGB':veil.tolist(),
             'shades_of_gray_p':4, 'white_balance_gains_RGB':gains.tolist(),
-            'red_compensation_strength':.20}
+            'red_compensation_strength':red_strength}
 
-def restore_red(x):
+def restore_red(x, strength=.28):
     # Regularized missing-red estimate from surviving green structure. It is
     # strongest in midtones, fades near highlights, and preserves measured red.
     y=x.copy()
     peak=np.max(x,axis=2)
-    y[:,:,0] += .20*np.maximum(x[:,:,1]-x[:,:,0],0)*(1-.70*np.clip(peak,0,1))
+    y[:,:,0] += strength*np.maximum(x[:,:,1]-x[:,:,0],0)*(1-.70*np.clip(peak,0,1))
     return y
 
 def color_correct(rgb,params):
@@ -58,7 +59,7 @@ def color_correct(rgb,params):
     veil=np.array(params['veil_linear_RGB'],np.float32)
     # Soft subtraction prevents new hard black clipping.
     x=x*x/(x+veil+1e-8)
-    x=restore_red(x)
+    x=restore_red(x, float(params.get('red_compensation_strength',.28)))
     x*=np.array(params['white_balance_gains_RGB'],np.float32)
     # A common scale factor gives highlight rolloff without channel clipping.
     peak=x.max(axis=2)
@@ -212,5 +213,58 @@ def richer(rgb):
     # Keep very bright near-neutral whites from acquiring an amplified tint.
     white=np.clip((lab[:,:,0]-75)/20,0,1)*np.exp(-(chroma/18)**2)
     gain=1+(gain-1)*(1-.85*white)
-    lab[:,:,1:]*=gain[:,:,None]
+    # Amplify residual green less than magenta/warm hues so vivid does not
+    # reintroduce the underwater green cast.
+    a=lab[:,:,1]
+    a_gain=np.where(a>=0,gain,1+(gain-1)*.40)
+    lab[:,:,1]=a*a_gain
+    lab[:,:,2]*=gain
     return np.round(lab_to_rgb_safe(lab)*255).astype(np.uint8)
+
+def reduce_green_cast(rgb, target_white_a=2.2):
+    # Adaptive residual-green cleanup after correction/vivid. Measures cast from
+    # bright near-neutrals, nudges whites toward a mild magenta-neutral target,
+    # warms olive midtones toward brown, and rotates lime HSV hues toward yellow.
+    lab=cv2.cvtColor(rgb.astype(np.float32)/255,cv2.COLOR_RGB2LAB)
+    L,a,b=lab[:,:,0],lab[:,:,1],lab[:,:,2]
+    chroma=np.hypot(a,b)
+    mask=(L>65)&(L<93)&(chroma<20)
+    if np.count_nonzero(mask)<500:
+        mask=(L>58)&(chroma<26)
+    if np.count_nonzero(mask)<200:
+        # Fall back to midtone near-neutrals when specular whites are scarce.
+        mask=(L>35)&(L>0)&(L<75)&(chroma<16)
+    if np.count_nonzero(mask)>=150:
+        aa,bb=a[mask],b[mask]
+        keep=((aa>=np.percentile(aa,20))&(aa<=np.percentile(aa,80))&
+              (bb>=np.percentile(bb,20))&(bb<=np.percentile(bb,80)))
+        a_cast=float(aa[keep].mean()); b_cast=float(bb[keep].mean())
+    else:
+        a_cast=float(np.median(a)); b_cast=float(np.median(b))
+    w=np.clip((L-5)/16,0,1)*np.clip((98-L)/8,0,1)
+    greenish=np.clip((-a)/8,0,1)
+    a_needed=max(0.0,min(target_white_a-a_cast,8.5)) if a_cast<target_white_a else 0.0
+    lab[:,:,1]=a+a_needed*w*(.80+.20*greenish)
+    if a_cast<.8 and b_cast>1.0:
+        lab[:,:,2]=lab[:,:,2]-.55*min(b_cast,8.0)*w*greenish
+    olive_amt=3.2+3.0*np.clip((target_white_a-a_cast)/6,0,1)
+    olive=((lab[:,:,1]>-16)&(lab[:,:,1]<5)&(lab[:,:,2]>5)&(lab[:,:,2]<30)&
+           (chroma>5)&(chroma<34)&(L>16)&(L<80)).astype(np.float32)
+    olive*=np.clip((10+np.minimum(lab[:,:,1],0))/9,0,1)
+    lab[:,:,1]=lab[:,:,1]+olive_amt*olive*w
+    lab[:,:,2]=lab[:,:,2]+1.3*olive*w
+    still=np.maximum(-lab[:,:,1],0)
+    lab[:,:,1]=lab[:,:,1]+.85*still*w
+    warmed=np.round(lab_to_rgb_safe(lab)*255).astype(np.uint8)
+    # Rotate lime/yellow-green toward golden yellow without crushing true greens
+    # that already sit near cyan-blue water hues.
+    hsv=cv2.cvtColor(warmed,cv2.COLOR_RGB2HSV).astype(np.float32)
+    hue,sat,val=hsv[:,:,0],hsv[:,:,1],hsv[:,:,2]
+    lime=((hue>=28)&(hue<=78)&(sat>28)&(val>35)&(val<245)).astype(np.float32)
+    lime*=np.clip((hue-24)/40,0,1)
+    # Strength tracks how green the measured neutrals still were.
+    lime_shift=(6.0+6.0*np.clip((target_white_a-a_cast)/6,0,1))*lime
+    hsv[:,:,0]=np.clip(hue-lime_shift,0,179)
+    out=cv2.cvtColor(np.round(hsv).astype(np.uint8),cv2.COLOR_HSV2RGB)
+    return out,{'neutral_a_cast':a_cast,'neutral_b_cast':b_cast,
+                'magenta_shift':a_needed,'olive_amount':float(olive_amt)}

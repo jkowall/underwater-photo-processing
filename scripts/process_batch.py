@@ -10,7 +10,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageCms, ImageDraw
 from underwater_pipeline import (load_source, metadata, preview_size, estimate,
-    color_correct, protect_highlights, lab_to_rgb_safe, polish, richer)
+    color_correct, protect_highlights, lab_to_rgb_safe, polish, richer,
+    reduce_green_cast)
 
 def sha256(path):
     digest=hashlib.sha256()
@@ -76,6 +77,8 @@ def process(path,output,look,recipe):
         del mask
     if look=='vivid':
         for start in range(0,len(result),256):result[start:start+256]=richer(result[start:start+256])
+    # Final adaptive pass removes residual underwater green after chroma boost.
+    result,green_cast=reduce_green_cast(result)
     dest=output/(path.stem+'_'+look+'.png')
     exif,date=metadata(path,result.shape[1],result.shape[0]);exif[305]='Python underwater correction: '+look
     icc=ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes()
@@ -103,7 +106,7 @@ def process(path,output,look,recipe):
             'recipe_id':recipe,'source_sha256':source_hash,'output_sha256':sha256(dest),
             'representation':'Full-resolution embedded camera JPEG, assumed sRGB',
             'dimensions':list(result.shape[1::-1]),'capture_date':str(date),'parameters':params,
-            'cleanup':cleanup,'before':stats(original),'after':stats(result),
+            'cleanup':cleanup,'green_cast':green_cast,'before':stats(original),'after':stats(result),
             'seconds':round(time.monotonic()-started,2),
             'validation':'Exact PNG pixel round trip, dimensions, capture date and ICC verified'}
     write_json(output/'reports'/(path.stem+'.json'),report)
