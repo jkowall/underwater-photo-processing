@@ -17,17 +17,18 @@ python3.12 -m venv .venv
 `bash scripts/setup.sh` performs the same steps. Set `PYTHON_BIN` if the
 interpreter has another name. The shell helper does not install Python itself.
 
-On Windows PowerShell, the equivalent commands are:
+`.\scripts\setup.ps1` performs the same steps on Windows (via `py -3.12`, or
+`PYTHON_BIN` if set). Then:
 
 ```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe scripts\process_batch.py --help
+.\scripts\process.ps1 "D:\path\to\NEFs"
 ```
 
-Windows instructions describe the standard Python setup; full-resolution NEF
-processing was validated on macOS, not Windows. Binary-wheel availability can
-depend on your platform and Python version.
+If `-Output` is omitted, PNGs go to a sibling `{input}-vivid` folder. The
+wrapper always passes `--resume`. Drop a folder onto `process.cmd` for the
+same defaults. Windows instructions describe the standard Python setup;
+full-resolution NEF processing was originally validated on macOS, not Windows.
+Binary-wheel availability can depend on your platform and Python version.
 
 ## Optional Codex skill
 

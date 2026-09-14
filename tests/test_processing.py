@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -47,6 +48,14 @@ class ImageTests(unittest.TestCase):
         self.assertGreater(mask[80,80],0)
         self.assertEqual(int(mask[:,194:207].max()),0)
         self.assertLess(np.count_nonzero(mask)/mask.size,.01)
+
+    def test_auto_look_classifies_water_versus_sunset(self):
+        water=np.full((80,120,3),[30,110,140],np.uint8)
+        sunset=np.zeros((80,120,3),np.uint8)
+        sunset[:40]=[220,90,40]
+        sunset[40:]=[40,70,160]
+        self.assertEqual(pipeline.classify_look(water),'vivid')
+        self.assertEqual(pipeline.classify_look(sunset),'natural')
 
     def test_rejects_smaller_embedded_preview(self):
         ok,data=cv2.imencode('.jpg',np.zeros((32,48,3),np.uint8))
@@ -101,6 +110,47 @@ class ResumeTests(unittest.TestCase):
         with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out)]):
             with self.assertRaises(SystemExit):runner.main()
         self.assertTrue((self.out/'.processing.lock').exists())
+
+    def test_stale_lock_mentions_inactive_pid(self):
+        lock=self.out/'.processing.lock';lock.mkdir()
+        (lock/'pid').write_text('99999999',encoding='utf-8')
+        stderr=StringIO()
+        with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out)]):
+            with patch.object(sys,'stderr',stderr):
+                with self.assertRaises(SystemExit):runner.main()
+        self.assertIn('99999999 is not running',stderr.getvalue())
+        self.assertTrue(lock.exists())
+
+    def test_resume_skips_verified_output(self):
+        self.record['recipe_id']=runner.recipe_id('vivid')
+        runner.write_json(self.out/'reports'/'source.json',self.record)
+        with patch.object(runner,'process') as processed:
+            with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out),'--resume']):
+                self.assertFalse(runner.main())
+        processed.assert_not_called()
+        summary=json.loads((self.out/'batch_summary.json').read_text(encoding='utf-8'))
+        self.assertEqual(summary['resumed'],1)
+        self.assertEqual(summary['processed'],0)
+
+
+class CliTests(unittest.TestCase):
+    def test_default_output_is_sibling_look_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            src=root/'Day4 onwards';src.mkdir()
+            (src/'a.NEF').write_bytes(b'NEF')
+            self.assertEqual(runner.default_output_path(src,'vivid'),root/'Day4 onwards-vivid')
+            with patch.object(runner,'process',return_value={'name':'a_vivid.png','dimensions':[1,1],'bytes':10}):
+                with patch.object(sys,'argv',['process_batch','--input',str(src)]):
+                    self.assertFalse(runner.main())
+            dest=root/'Day4 onwards-vivid'
+            self.assertTrue((dest/'batch_summary.json').is_file())
+            self.assertFalse((dest/'.processing.lock').exists())
+
+    def test_format_duration(self):
+        self.assertEqual(runner.format_duration(12),'12s')
+        self.assertEqual(runner.format_duration(130),'2m10s')
+        self.assertEqual(runner.format_duration(3661),'1h01m01s')
 
 
 class InstallTests(unittest.TestCase):

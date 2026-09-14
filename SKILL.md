@@ -16,7 +16,9 @@ pixel computations.
   capture dates. Keep originals and earlier accepted/reviewable versions.
 - Use `--look vivid` as the maintainer-approved default: stronger color with
   denoising and conservative particulate cleanup. Adapt to user preferences
-  when they request a different treatment.
+  when they request a different treatment. `--look auto` classifies a small
+  preview and uses `vivid` underwater and `natural` topside/sunset; do not
+  change vivid numerics on underwater frames.
 - Read [references/current-treatment.md](references/current-treatment.md) before
   continuing this project. It records the approved treatment, tested settings,
   and source limitations. Assess representative images for a new batch rather
@@ -63,12 +65,28 @@ task-local virtual environment; do not install packages into system Python.
 python scripts/process_batch.py --input '/path/to/NEFs' --output '/path/to/new-output' --look vivid
 ```
 
-`--input` accepts one NEF or a directory of NEFs. `--look natural` applies the
+On Windows, prefer the wrapper (always `--look vivid` unless overridden, sibling
+`{input}-vivid` output if `-Output` is omitted, always `--resume`):
+
+```powershell
+.\scripts\process.ps1 "D:\path\to\NEFs"
+.\scripts\process.ps1 "D:\path\to\NEFs" -Look auto -Output "D:\path\to\throwaway"
+```
+
+Drop a NEF folder onto `process.cmd` for the same defaults.
+
+`--input` accepts one NEF or a directory of NEFs. If `--output` is omitted,
+results go to a sibling `{input}-{look}` folder. `--look natural` applies the
 initial correction; `pop` adds second-pass cleanup and contrast; the default
-`vivid` adds the approved substantial chroma increase. These are starting recipes, not a claim
+`vivid` adds the approved substantial chroma increase. `--look auto` keeps
+underwater frames on `vivid` and uses `natural` for topside/sunset so mixed
+dive-day folders are not over-boosted. These are starting recipes, not a claim
 of calibrated color accuracy. Use a small representative selection for an
 unfamiliar batch. The helper refuses unverified output collisions; `--resume`
 skips only files matching source, recipe, dependencies and output checksums.
+Progress includes elapsed time and an ETA; the end-of-run summary reports
+counts, errors, output size, and elapsed time. A stale lock whose recorded PID
+is not running is reported as likely stale; do not auto-delete locks.
 It writes PNGs, before/
 after previews, reports, and a summary. It does not upload or publish anything.
 

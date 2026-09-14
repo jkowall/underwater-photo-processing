@@ -124,6 +124,32 @@ def metadata(path,w,h):
 def preview_size(rgb,width=1200):
     return cv2.resize(rgb,(width,round(rgb.shape[0]*width/rgb.shape[1])),interpolation=cv2.INTER_AREA)
 
+def classify_look(rgb):
+    # Small-preview topside vs underwater guess. Underwater (cyan/green, depleted
+    # red) stays vivid; sky/sunset topside uses natural so warm scenes are not
+    # over-boosted. This does not change vivid numerics on underwater frames.
+    sample=preview_size(rgb,320) if min(rgb.shape[:2])>64 else rgb
+    top=sample[:max(1,sample.shape[0]//3)]
+    r,g,b=[float(x) for x in top.reshape(-1,3).mean(0)]
+    red_ratio=r/(r+g+b+1e-6)
+    hsv=cv2.cvtColor(top,cv2.COLOR_RGB2HSV)
+    hue,sat,val=hsv[:,:,0],hsv[:,:,1],hsv[:,:,2]
+    usable=(val>25)&(sat>20)
+    if np.any(usable):
+        h=hue[usable]
+        warm=float(((h<=22)|(h>=165)).mean())
+        water=float(((h>=45)&(h<=110)).mean())
+        sky=float(((h>110)&(h<=140)).mean())
+    else:
+        warm=water=sky=0.0
+    if warm>0.12 and red_ratio>0.32:
+        return 'natural'
+    if sky>water and red_ratio>0.28:
+        return 'natural'
+    if red_ratio<0.30 or water>=sky:
+        return 'vivid'
+    return 'natural'
+
 def protect_highlights(lab,source):
     # Green-clipped cyan highlights have unreliable recovered red. Reduce their
     # chroma smoothly, avoiding the pink patches produced by independent gains.

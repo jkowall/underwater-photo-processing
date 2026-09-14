@@ -11,7 +11,9 @@ import numpy as np
 from PIL import Image, ImageCms, ImageDraw
 from underwater_pipeline import (load_source, metadata, preview_size, estimate,
     color_correct, protect_highlights, lab_to_rgb_safe, polish, richer,
-    reduce_green_cast)
+    reduce_green_cast, classify_look)
+
+_recipe_cache={}
 
 def sha256(path):
     digest=hashlib.sha256()
@@ -20,10 +22,76 @@ def sha256(path):
     return digest.hexdigest()
 
 def recipe_id(look):
+    if look in _recipe_cache:return _recipe_cache[look]
     root=Path(__file__).parent
     value={'look':look,'code':[sha256(root/name) for name in ['process_batch.py','underwater_pipeline.py']],
            'dependencies':{name:version(name) for name in ['numpy','opencv-python-headless','rawpy','Pillow']}}
-    return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
+    digest=hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
+    _recipe_cache[look]=digest
+    return digest
+
+def default_output_path(input_path,look):
+    path=input_path.expanduser().resolve()
+    name=path.stem if path.is_file() else path.name
+    return path.parent/f'{name}-{look}'
+
+def format_duration(seconds):
+    seconds=max(0,int(seconds))
+    hours,rest=divmod(seconds,3600)
+    minutes,secs=divmod(rest,60)
+    if hours:return f'{hours}h{minutes:02d}m{secs:02d}s'
+    if minutes:return f'{minutes}m{secs:02d}s'
+    return f'{secs}s'
+
+def pid_running(pid):
+    if pid<=0:return False
+    if os.name=='nt':
+        import ctypes
+        kernel32=ctypes.windll.kernel32
+        handle=kernel32.OpenProcess(0x1000,False,int(pid))
+        if not handle:return False
+        try:
+            code=ctypes.c_ulong()
+            if kernel32.GetExitCodeProcess(handle,ctypes.byref(code)):
+                return code.value==259
+            return True
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid,0)
+    except OSError:
+        return False
+    return True
+
+def lock_message(lock):
+    hint='Output is locked.'
+    pid_file=lock/'pid'
+    if pid_file.is_file():
+        try:pid=int(pid_file.read_text(encoding='utf-8').strip())
+        except ValueError:pid=None
+        if pid is not None:
+            if pid_running(pid):hint+=f' Recorded PID {pid} appears to be running.'
+            else:hint+=f' Recorded PID {pid} is not running; this lock is likely stale.'
+    return hint+' If the previous run was killed, confirm it stopped before removing .processing.lock'
+
+def look_choices(look):
+    return ('natural','pop','vivid') if look=='auto' else (look,)
+
+def output_occupied(path,output,look):
+    names=[output/'reports'/(path.stem+'.json'),output/'previews'/(path.stem+'.jpg')]
+    names.extend(output/(path.stem+'_'+item+'.png') for item in look_choices(look))
+    return any(item.exists() for item in names)
+
+def resume_look(path,output,look,recipes):
+    if look=='auto':
+        report=output/'reports'/(path.stem+'.json')
+        if not report.is_file():return None
+        try:saved=json.loads(report.read_text(encoding='utf-8'))
+        except (OSError,ValueError):return None
+        item=saved.get('look')
+        if item not in recipes:return None
+        return item if resume_valid(path,output,item,recipes[item]) else None
+    return look if resume_valid(path,output,look,recipes[look]) else None
 
 def write_json(path,value):
     temporary=path.with_suffix('.tmp.json')
@@ -69,6 +137,9 @@ def process(path,output,look,recipe):
     started=time.monotonic()
     source_hash=sha256(path)
     original=load_source(path)
+    if look=='auto':
+        look=classify_look(original)
+        recipe=recipe_id(look)
     result,params=initial(original)
     cleanup=None
     if look in ('pop','vivid'):
@@ -116,42 +187,68 @@ def process(path,output,look,recipe):
 def main():
     p=argparse.ArgumentParser()
     p.add_argument('--input',required=True,type=Path)
-    p.add_argument('--output',required=True,type=Path)
-    p.add_argument('--look',choices=['natural','pop','vivid'],default='vivid')
+    p.add_argument('--output',type=Path,help='Output folder; default is a sibling {input}-{look} directory')
+    p.add_argument('--look',choices=['natural','pop','vivid','auto'],default='vivid',
+                   help='vivid is the approved default. auto uses vivid underwater and natural topside')
     p.add_argument('--resume',action='store_true',help='Skip outputs matching source, recipe, dependencies and PNG checksums')
     args=p.parse_args()
     if not args.input.exists():p.error('Input does not exist')
     paths=[args.input] if args.input.is_file() else sorted(x for x in args.input.iterdir() if x.suffix.lower()=='.nef')
     if not paths or any(x.suffix.lower()!='.nef' for x in paths):p.error('Input must contain NEF files')
     if len({x.stem.casefold() for x in paths})!=len(paths):p.error('Duplicate input stems would collide')
-    for directory in [args.output,args.output/'previews',args.output/'reports']:directory.mkdir(parents=True,exist_ok=True)
-    lock=args.output/'.processing.lock'
+    output=args.output.resolve() if args.output else default_output_path(args.input,args.look)
+    for directory in [output,output/'previews',output/'reports']:directory.mkdir(parents=True,exist_ok=True)
+    lock=output/'.processing.lock'
     try:lock.mkdir()
-    except FileExistsError:p.error('Output is locked. If the previous run was killed, confirm it stopped before removing .processing.lock')
+    except FileExistsError:p.error(lock_message(lock))
     try:
         (lock/'pid').write_text(str(os.getpid()),encoding='utf-8')
+        started=time.monotonic()
         recipe=recipe_id(args.look)
-        results=[];errors=[];skip=set()
+        recipes={item:recipe_id(item) for item in look_choices(args.look)}
+        results=[];errors=[];skip={}
         for path in paths:
-            occupied=any(x.exists() for x in [args.output/(path.stem+'_'+args.look+'.png'),args.output/'reports'/(path.stem+'.json'),args.output/'previews'/(path.stem+'.jpg')])
+            occupied=output_occupied(path,output,args.look)
             if occupied:
-                if args.resume and resume_valid(path,args.output,args.look,recipe):skip.add(path)
+                matched=resume_look(path,output,args.look,recipes) if args.resume else None
+                if matched:skip[path]=matched
                 else:p.error(f'Unverified output collision for {path.name}; choose a fresh output folder')
-        for path in paths:
+        processed_times=[]
+        def write_summary(elapsed):
+            processed=sum(1 for item in results if item.get('status')!='verified-existing')
+            resumed=sum(1 for item in results if item.get('status')=='verified-existing')
+            total_bytes=sum(item.get('bytes',0) for item in results)
+            write_json(output/'batch_summary.json',{
+                'look':args.look,'recipe_id':recipe,'completed':results,'errors':errors,
+                'processed':processed,'resumed':resumed,'output_bytes':total_bytes,
+                'seconds':round(elapsed,2)})
+        for index,path in enumerate(paths,1):
+            elapsed=time.monotonic()-started
+            remaining=sum(1 for item in paths[index-1:] if item not in skip)
+            eta=f'  ETA {format_duration(sum(processed_times)/len(processed_times)*remaining)}' if processed_times else ''
+            print(f'Processing {index}/{len(paths)} {path.name}  elapsed {format_duration(elapsed)}{eta}',flush=True)
             try:
                 if path in skip:
-                    name=path.stem+'_'+args.look+'.png'
-                    results.append({'name':name,'status':'verified-existing'})
-                    print('Verified existing',name,flush=True)
-                else:results.append(process(path,args.output,args.look,recipe))
+                    look=skip[path]
+                    dest=output/(path.stem+'_'+look+'.png')
+                    results.append({'name':dest.name,'status':'verified-existing','bytes':dest.stat().st_size})
+                    print('Verified existing',dest.name,flush=True)
+                else:
+                    step=time.monotonic()
+                    results.append(process(path,output,args.look,recipes.get(args.look,recipe)))
+                    processed_times.append(time.monotonic()-step)
             except Exception as error:
                 errors.append({'source':path.name,'error':str(error)})
                 print('Failed',path.name,type(error).__name__,str(error),flush=True)
-            write_json(args.output/'batch_summary.json',{'look':args.look,'recipe_id':recipe,'completed':results,'errors':errors})
+            write_summary(time.monotonic()-started)
     finally:
         (lock/'pid').unlink(missing_ok=True)
         lock.rmdir()
-    print(f'Completed {len(results)}/{len(paths)}',flush=True)
+    elapsed=time.monotonic()-started
+    processed=sum(1 for item in results if item.get('status')!='verified-existing')
+    resumed=sum(1 for item in results if item.get('status')=='verified-existing')
+    total_bytes=sum(item.get('bytes',0) for item in results)
+    print(f'Summary: completed {len(results)}/{len(paths)}  processed {processed}  resumed {resumed}  failed {len(errors)}  output {total_bytes/1e9:.2f} GB  elapsed {format_duration(elapsed)}',flush=True)
     return bool(errors)
 
 if __name__=='__main__':raise SystemExit(main())
