@@ -21,13 +21,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host 'Classical pipeline Ready. Run .venv\Scripts\python.exe scripts\process_batch.py --help'
 
+Write-Host ''
+Write-Host 'Fetching neural repos/weights (skip clones that already exist)...'
+& (Join-Path $PSScriptRoot 'fetch_neural_weights.ps1')
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '[warn] fetch_neural_weights.ps1 reported a problem; classical looks still work'
+}
+
 # Neural looks (spectroformer / nu2net) require WSL2 + micromamba env uw_eval.
 $spectro = Join-Path (Get-Location) 'eval\repos\spectroformer\checkpoints\best.pth'
 $nu2 = Join-Path (Get-Location) 'eval\repos\uie_benchmark\checkpoints\UIEB\NU2Net.ckpt'
 $runner = Join-Path (Get-Location) 'eval\scripts\run_uie_look.py'
 
 Write-Host ''
-Write-Host 'Neural GPU looks (default: spectroformer) checklist:'
+Write-Host 'Neural GPU looks checklist (default CLI look: auto):'
 if (Get-Command wsl -ErrorAction SilentlyContinue) {
     Write-Host '  [ok] wsl.exe on PATH'
 } else {
@@ -41,12 +48,12 @@ if (Test-Path $runner) {
 if (Test-Path $spectro) {
     Write-Host "  [ok] Spectroformer weights"
 } else {
-    Write-Host "  [missing] $spectro"
+    Write-Host "  [missing] $spectro — see docs/neural-setup.md"
 }
 if (Test-Path $nu2) {
     Write-Host "  [ok] NU2Net weights"
 } else {
-    Write-Host "  [missing] $nu2"
+    Write-Host "  [missing] $nu2 — optional unless -Look nu2net"
 }
 
 $envCheck = @'
@@ -63,5 +70,6 @@ if (Get-Command wsl -ErrorAction SilentlyContinue) {
 }
 
 Write-Host ''
-Write-Host 'Default: .\scripts\process.ps1 <NEF-folder>  (spectroformer via WSL)'
+Write-Host 'Default: .\scripts\process.ps1 <NEF-folder>  (-Look auto: UW→spectroformer, topside→natural)'
+Write-Host 'UW-only GPU: .\scripts\process.ps1 <NEF-folder> -Look spectroformer'
 Write-Host 'Classical CPU: .\scripts\process.ps1 <NEF-folder> -Look vivid'

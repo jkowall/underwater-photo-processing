@@ -2,19 +2,19 @@
 
 ## Start a run
 
-On Windows, start with the one-liner. It uses `--look vivid`, writes to a sibling
-`{input}-vivid` folder when `-Output` is omitted, and always resumes verified PNGs:
+On Windows, start with the one-liner. Default look is **`auto`** (underwater →
+spectroformer via WSL; topside → natural). It writes to a sibling `{input}-auto`
+folder when `-Output` is omitted, and always resumes verified PNGs:
 
 ```powershell
 .\scripts\process.ps1 "D:\path\to\NEFs"
 .\scripts\process.ps1 "D:\path\to\NEFs" -Output "D:\path\to\throwaway-output"
-.\scripts\process.ps1 "D:\path\to\NEFs" -Look auto
+.\scripts\process.ps1 "D:\path\to\NEFs" -Look spectroformer
+.\scripts\process.ps1 "D:\path\to\NEFs" -Look vivid
 ```
 
-Drop a NEF folder onto `process.cmd` for the same defaults. Mixed dive-day
-folders (underwater plus topside/sunset) can use `-Look auto` so sunsets are not
-over-boosted; underwater frames still get the approved vivid recipe. Default
-`vivid` still applies that recipe to every file.
+Drop a NEF folder onto `process.cmd` for the same defaults. Classical CPU:
+`-Look vivid`. UW-only GPU folder: `-Look spectroformer`.
 
 Select a few representative photos first: a close subject, bright whites,
 and a wide or hazy scene. Review full-size crops for lost detail and artificial
@@ -22,16 +22,16 @@ color before running a new collection through the same preset.
 
 ```bash
 .venv/bin/python scripts/process_batch.py \
-  --input '/photos/to-process' --output '/photos/results-vivid' --look vivid
+  --input '/photos/to-process' --output '/photos/results-auto' --look auto
 ```
 
 If `--output` is omitted, the runner writes to a sibling `{input}-{look}` folder.
 The directory scan is non-recursive and accepts `.nef` case-insensitively.
 Duplicate filename stems are rejected to prevent output collisions. Original
-NEFs are read-only. Processing is sequential; no per-image model request occurs.
-Progress lines include elapsed time and an ETA after the first processed image.
-The end-of-run summary reports completed/processed/resumed/failed counts,
-output size, and elapsed time.
+NEFs are read-only. Processing is sequential. Neural looks call WSL; classical
+looks stay in the local venv. Progress lines include elapsed time and an ETA
+after the first processed image. The end-of-run summary reports
+completed/processed/resumed/failed counts, output size, and elapsed time.
 
 Allow roughly 60 MB per 45 MP PNG as an initial estimate, plus room for previews,
 reports, and in-progress files. Actual size depends on texture and noise.

@@ -401,9 +401,10 @@ def main():
     p.add_argument(
         '--look',
         choices=['natural', 'pop', 'vivid', 'auto', 'spectroformer', 'nu2net'],
-        default='spectroformer',
-        help='spectroformer is the GPU default (WSL uw_eval). vivid/natural/pop are classical CPU looks. '
-             'auto uses spectroformer underwater and natural topside. nu2net is a fast GPU alternate.',
+        default='auto',
+        help='auto (default): spectroformer underwater, natural topside. '
+             'spectroformer/nu2net are GPU looks via WSL uw_eval. '
+             'vivid/natural/pop are classical CPU looks.',
     )
     p.add_argument('--resume', action='store_true', help='Skip outputs matching source, recipe, dependencies and PNG checksums')
     args = p.parse_args()

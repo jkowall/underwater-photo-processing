@@ -1,14 +1,21 @@
 # Current treatment and observed feedback
 
-Updated: 2026-09-11. This is a maintained working recipe, not a calibrated camera
-profile or a universally appropriate underwater look.
+Updated: 2026-09-22. Classical OpenCV recipe notes; CLI default look is separate.
 
-## Approved baseline
+## CLI default vs classical recipe
 
-The V4 vivid treatment is the maintainer-approved default as of 2026-09-11. It
-keeps V2 cleanup and V3 chroma, then reduces residual underwater green cast.
-Earlier presets and `work/batch_output_v3` remain available for comparison.
-Processed batches belong under gitignored `work/`.
+- **Product CLI default** (`process.ps1`): **`auto`** (spectroformer underwater,
+  natural topside). See [docs/neural-setup.md](../docs/neural-setup.md).
+  Use `-Look spectroformer` for UW-only batches.
+- **Classical OpenCV default** when using `-Look vivid`: the V4 vivid treatment
+  below. Still the approved non-neural recipe for CPU-only or fallback runs.
+
+## Approved classical baseline (vivid)
+
+The V4 vivid treatment is the maintainer-approved **classical** recipe as of
+2026-09-11. It keeps V2 cleanup and V3 chroma, then reduces residual underwater
+green cast. Earlier presets and `work/batch_output_v3` remain available for
+comparison. Processed batches belong under gitignored `work/`.
 
 ## Source observations
 

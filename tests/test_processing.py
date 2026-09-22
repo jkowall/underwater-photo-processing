@@ -151,6 +151,13 @@ class CliTests(unittest.TestCase):
                 with patch.object(runner,'check_neural_prereqs'):
                     with patch.object(sys,'argv',['process_batch','--input',str(src)]):
                         self.assertFalse(runner.main())
+            dest_auto=root/'Day4 onwards-auto'
+            self.assertTrue((dest_auto/'batch_summary.json').is_file())
+            self.assertFalse((dest_auto/'.processing.lock').exists())
+            with patch.object(runner,'process',return_value={'name':'a_spectroformer.png','dimensions':[1,1],'bytes':10}):
+                with patch.object(runner,'check_neural_prereqs'):
+                    with patch.object(sys,'argv',['process_batch','--input',str(src),'--look','spectroformer']):
+                        self.assertFalse(runner.main())
             dest_sf=root/'Day4 onwards-spectroformer'
             self.assertTrue((dest_sf/'batch_summary.json').is_file())
             self.assertFalse((dest_sf/'.processing.lock').exists())

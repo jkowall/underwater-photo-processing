@@ -4,7 +4,7 @@ param(
     [string]$InputPath,
     [string]$Output,
     [ValidateSet('natural', 'pop', 'vivid', 'auto', 'spectroformer', 'nu2net')]
-    [string]$Look = 'spectroformer'
+    [string]$Look = 'auto'
 )
 
 $ErrorActionPreference = 'Stop'

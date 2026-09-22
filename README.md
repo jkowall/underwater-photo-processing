@@ -1,14 +1,15 @@
 # Underwater Photo Processing
 
-A Python processor and Codex skill for correcting underwater photographs:
+A Python processor and agent skill for correcting underwater photographs:
 reduce blue/green cast, restore warmer color, and export full-resolution
 lossless PNGs.
 
-The default **spectroformer** look runs a GPU underwater-image-enhancement
-model (bakeoff runner-up; best shippable GPU path after the 2026 UIE eval).
-It needs **WSL2 + micromamba env `uw_eval`** with CUDA torch. Classical CPU
-looks (`vivid`, `pop`, `natural`) still run in the Windows `.venv` with
-OpenCV/NumPy only — no API keys or cloud services.
+The default **`auto`** look routes underwater frames through **spectroformer**
+(GPU via WSL) and topside/sunset through classical **natural**, so mixed dive
+days are safer. Force `-Look spectroformer` for UW-only folders. Classical CPU
+looks (`vivid`, `pop`, `natural`) run in the Windows `.venv` with OpenCV/NumPy
+only — no API keys or cloud services. Spectroformer needs **WSL2 + micromamba
+env `uw_eval`** with CUDA torch.
 
 **Current input support:** Nikon NEFs containing an unrotated, full-resolution
 embedded JPEG whose dimensions match the RAW crop. This is deliberately the
@@ -17,25 +18,24 @@ lossy compression but cannot recover information missing from that JPEG.
 
 ## Quick start
 
-On Windows, one command processes a NEF folder with **spectroformer** (GPU via WSL).
-Output goes to a sibling `{folder}-spectroformer` directory so originals stay read-only.
-The wrapper creates a Python 3.12 virtual environment if needed and always
-passes `--resume` so reruns skip verified PNGs.
+On Windows, one command processes a NEF folder with **`auto`** (sibling
+`{folder}-auto`). The wrapper creates a Python 3.12 virtual environment if
+needed and always passes `--resume` so reruns skip verified PNGs.
 
 ```powershell
 git clone https://github.com/jkowall/underwater-photo-processing.git
 cd underwater-photo-processing
 .\scripts\setup.ps1
+.\scripts\fetch_neural_weights.ps1   # also invoked from setup.ps1
 .\scripts\process.ps1 "D:\path\to\NEFs"
 ```
 
-`setup.ps1` installs classical deps and prints a checklist for WSL / `uw_eval` /
-Spectroformer + NU2Net weights under `eval/repos/`. Details:
+`setup.ps1` installs classical deps, clones neural repos when possible, and
+prints a WSL / `uw_eval` / weight checklist. Details:
 [docs/neural-setup.md](docs/neural-setup.md).
 
 Drop a NEF folder onto `process.cmd` for the same default. Pass `-Output` for a
-throwaway destination, or `-Look auto` for mixed dive-day folders (underwater
-→ spectroformer; topside/sunset → natural). Classical CPU: `-Look vivid`.
+throwaway destination. UW-only: `-Look spectroformer`. Classical CPU: `-Look vivid`.
 Do not point `-Output` at an existing corrected batch unless you intend to resume it.
 
 macOS/Linux classical path (neural looks still expect WSL/`uw_eval` on this machine):
@@ -64,15 +64,18 @@ Originals are read-only, and existing results are never silently overwritten.
 
 | Look | Treatment |
 | --- | --- |
-| `spectroformer` (default) | GPU UIE @ long-edge 1536 (infer 512→upsample); WSL `uw_eval` |
+| `auto` (default) | Underwater → `spectroformer`; topside/sunset → `natural` |
+| `spectroformer` | GPU UIE @ long-edge 1536 (infer 512→upsample); WSL `uw_eval` |
 | `nu2net` | Fast GPU alternate; pad-to-16; WSL `uw_eval` |
 | `natural` | Classical: water-cast correction, red compensation, WB, local contrast |
 | `pop` | Classical: natural + mild denoise, particle cleanup, stronger contrast |
 | `vivid` | Classical: pop + richer color (approved OpenCV recipe) |
-| `auto` | Underwater → `spectroformer`; topside/sunset → `natural` |
 
 Neural looks enhance at long-edge 1536 then upsample to the source embedded-JPEG
 size for full-res PNG export. Classical looks process at full embedded resolution.
+
+**Retraining:** not part of normal processing. See
+[docs/retraining.md](docs/retraining.md) (occasional domain adaptation only).
 
 ## Outputs and larger batches
 
@@ -93,18 +96,23 @@ do not delete it until you confirm no run is using that folder.
 See [batch processing](docs/batch-processing.md) for recovery, disk planning,
 and known limitations. Mixed dive-day folders can use `--look auto`.
 
-## Install the Codex skill
+## Agent skill (Cursor, Codex, and other SKILL.md hosts)
+
+The repo-root [`SKILL.md`](SKILL.md) is a standard Agent Skill entrypoint — not
+tied to one LLM product. Cursor picks it up from the repo (and
+[`.cursor/skills/uie-retrain/`](.cursor/skills/uie-retrain/) for domain
+adaptation). Other hosts can copy the same files.
 
 ```bash
+# Optional: install a personal copy (Codex default path, or pass --destination)
 .venv/bin/python scripts/install_skill.py
+.venv/bin/python scripts/install_skill.py --destination ~/.cursor/skills/underwater-photo-processing
 ```
 
-This installs the skill and its self-contained processing helpers under
-`$CODEX_HOME/skills/underwater-photo-processing`, or `~/.codex/skills` when unset.
-Use `--update` to refresh an existing installation after reviewing local edits.
-Invoke it as `$underwater-photo-processing` in Codex. The [skill entrypoint](SKILL.md)
-records the approved look and the instruction to keep its treatment notes current.
-
+`install_skill.py` copies `SKILL.md`, `agents/`, `references/`, and the two
+processor scripts. Use `--update` after reviewing local edits. Optional Codex
+metadata lives in [`agents/openai.yaml`](agents/openai.yaml); ignore it on
+hosts that do not use that file.
 ## How it works and what to inspect
 
 Read [the pipeline](docs/pipeline.md) for classical correction stages and

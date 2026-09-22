@@ -25,6 +25,9 @@ denoising, an adaptive black offset, an S curve, and restrained local contrast.
 and bright near-neutral whites. See the [recipe](../references/current-treatment.md)
 for exact parameters and initial validation.
 
+GPU looks (`spectroformer`, `nu2net`) skip this classical chain and call
+`eval/scripts/run_uie_look.py` via WSL — see [neural-setup.md](neural-setup.md).
+
 ## Noise and particulate are different
 
 Bilateral filters reduce fine luminance and chroma noise while limiting blur

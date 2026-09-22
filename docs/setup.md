@@ -26,24 +26,31 @@ and NU2Net checkpoints under `eval/repos/`). Full neural setup:
 .\scripts\process.ps1 "D:\path\to\NEFs"
 ```
 
-Default look is **spectroformer** (sibling `{input}-spectroformer`). Classical
-CPU: `-Look vivid`. Fast GPU alternate: `-Look nu2net`. The wrapper always
-passes `--resume`. Drop a folder onto `process.cmd` for the same defaults.
+Default look is **auto** (sibling `{input}-auto`). UW-only GPU:
+`-Look spectroformer`. Classical CPU: `-Look vivid`. Fast GPU alternate:
+`-Look nu2net`. The wrapper always passes `--resume`. Drop a folder onto
+`process.cmd` for the same defaults.
 
 Windows classical processing uses the standard Python `.venv`. Neural looks
 call WSL `uw_eval` (torch+CUDA). Binary-wheel availability for classical deps
 can depend on your platform and Python version.
 
-## Optional Codex skill
+## Optional agent skill
 
-Run `scripts/install_skill.py` using Python. It copies only `SKILL.md`, skill
-metadata, treatment references, and the two processor scripts. It does not copy
-your virtual environment, photographs, Git metadata, or generated outputs.
-The installed skill can use any environment with the required dependencies.
+Run `scripts/install_skill.py` using Python. It copies `SKILL.md`, optional
+`agents/` metadata, treatment references, and the two processor scripts. It
+does not copy your virtual environment, photographs, Git metadata, or generated
+outputs. The skill works with any agent that reads `SKILL.md` (Cursor in-repo
+by default; Codex or others via `--destination`).
 
-An existing skill is not overwritten unless you pass `--update`. Updates replace
-known payload files and preserve unrelated files. Review custom changes first.
-Use `--destination /path/to/skill-folder` to test an installation elsewhere.
+An existing install is not overwritten unless you pass `--update`. Updates
+replace known payload files and preserve unrelated files. Review custom changes
+first. Examples:
+
+```bash
+.venv/bin/python scripts/install_skill.py
+.venv/bin/python scripts/install_skill.py --destination ~/.cursor/skills/underwater-photo-processing --update
+```
 
 ## Troubleshooting
 

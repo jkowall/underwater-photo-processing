@@ -16,11 +16,13 @@ own copyright and license terms. Apache 2.0 does **not** relicense them.
 - **License status (as of 2026-09):** the upstream GitHub repository does **not**
   publish a `LICENSE` file (`license: null` on the API). Do **not** assume you
   may redistribute Spectroformer source or weights under Apache 2.0.
+  Clarification requested: https://github.com/Mdraqibkhan/Spectroformer/issues/5
 - **This repo’s practice:** treat Spectroformer as an **optional runtime
   dependency** cloned/downloaded locally (under `eval/repos/spectroformer/`,
   gitignored for large assets). Credit the paper when you use or publish results.
   For a public redistribution that **bundles** Spectroformer code or weights,
   obtain explicit permission / a license from the authors first.
+  Bootstrap clones via `.\scripts\fetch_neural_weights.ps1`.
 
 ```bibtex
 @inproceedings{khan2024spectroformer,

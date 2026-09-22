@@ -14,9 +14,9 @@ per [THIRD_PARTY.md](THIRD_PARTY.md).
 
 - Deliver full-resolution lossless PNG with an sRGB profile and original camera
   capture dates. Keep originals and earlier accepted/reviewable versions.
-- Default CLI look is **`spectroformer`** (GPU via WSL). Classical
-  maintainer-approved OpenCV recipe remains `--look vivid`. `--look auto`
-  uses spectroformer underwater and natural topside/sunset.
+- Default CLI look is **`auto`** (spectroformer underwater, natural topside).
+  Classical maintainer-approved OpenCV recipe remains `--look vivid`.
+  Force `--look spectroformer` for UW-only folders.
 - You do **not** retrain models per photo batch; run inference with existing
   weights. Retrain only for deliberate domain adaptation with paired data.
   When the user asks to retrain / fine-tune / domain-adapt UIE weights, follow
