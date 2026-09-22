@@ -1,0 +1,7 @@
+# Optional GPU looks (spectroformer / nu2net) on Apple Silicon (MPS).
+# Install into the same .venv as requirements.txt:
+#   .venv/bin/python -m pip install -r requirements-neural-macos.txt
+#
+# Official macOS wheels include MPS support when running on Apple Silicon.
+torch>=2.2.0
+torchvision>=0.17.0

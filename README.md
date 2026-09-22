@@ -5,12 +5,14 @@ reduce blue/green cast, restore warmer color, and export full-resolution
 lossless PNGs.
 
 The default **`auto`** look routes underwater frames through **spectroformer**
-(GPU via WSL) and topside/sunset through classical **natural**, so mixed dive
-days are safer. Force `-Look spectroformer` for UW-only folders. Classical CPU looks
-(`vivid`, `pop`, `natural`) run in the Windows `.venv` with OpenCV/NumPy only —
-no API keys or cloud services. Spectroformer prefers **Windows CUDA torch** in
-the same `.venv` (`requirements-neural.txt`); **WSL2 `uw_eval`** remains a
-fallback if native CUDA is unavailable.
+(GPU: Windows CUDA, Apple Silicon MPS, or WSL fallback) and topside/sunset
+through classical **natural**, so mixed dive days are safer. Force
+`-Look spectroformer` / `--look spectroformer` for UW-only folders. Classical
+CPU looks (`vivid`, `pop`, `natural`) run in the local `.venv` with OpenCV/NumPy
+only — no API keys or cloud services. Spectroformer prefers **native GPU torch**
+in the same `.venv` (`requirements-neural.txt` on Windows CUDA,
+`requirements-neural-macos.txt` on Apple Silicon); **WSL2 `uw_eval`** remains a
+Windows fallback if native CUDA is unavailable.
 
 **Current input support:** Nikon NEFs containing an unrotated, full-resolution
 embedded JPEG whose dimensions match the RAW crop. This is deliberately the
@@ -38,8 +40,22 @@ prints a WSL / `uw_eval` / weight checklist. Details:
 Drop a NEF folder onto `process.cmd` for the same default. Pass `-Output` for a
 throwaway destination. UW-only: `-Look spectroformer`. Classical CPU: `-Look vivid`.
 Do not point `-Output` at an existing corrected batch unless you intend to resume it.
+On success, `process.ps1` opens the output folder in Explorer (`-NoOpen` to skip).
 
-macOS/Linux classical path (neural looks still expect WSL/`uw_eval` on this machine):
+### macOS (Apple Silicon)
+
+```bash
+git clone https://github.com/jkowall/underwater-photo-processing.git
+cd underwater-photo-processing
+bash scripts/setup.sh
+bash scripts/process.sh '/path/to/NEFs'
+```
+
+`setup.sh` installs classical deps plus MPS torch (`requirements-neural-macos.txt`)
+and fetches neural repos when possible. Details: [docs/neural-setup.md](docs/neural-setup.md).
+UW-only: `--look spectroformer`. Classical: `--look vivid`. `--no-open` skips Finder.
+
+Linux classical path (CUDA neural looks need a separate torch install):
 
 ```bash
 git clone https://github.com/jkowall/underwater-photo-processing.git
@@ -66,8 +82,8 @@ Originals are read-only, and existing results are never silently overwritten.
 | Look | Treatment |
 | --- | --- |
 | `auto` (default) | Underwater → `spectroformer`; topside/sunset → `natural` |
-| `spectroformer` | GPU UIE @ long-edge 1536 (infer 512→upsample); WSL `uw_eval` |
-| `nu2net` | Fast GPU alternate; pad-to-16; WSL `uw_eval` |
+| `spectroformer` | GPU UIE @ long-edge 1536 (infer 512→upsample); CUDA / MPS / WSL |
+| `nu2net` | Fast GPU alternate; pad-to-16; CUDA / MPS / WSL |
 | `natural` | Classical: water-cast correction, red compensation, WB, local contrast |
 | `pop` | Classical: natural + mild denoise, particle cleanup, stronger contrast |
 | `vivid` | Classical: pop + richer color (approved OpenCV recipe) |

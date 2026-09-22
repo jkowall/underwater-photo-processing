@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bakeoff-proven Spectroformer / NU2Net inference (run inside WSL uw_eval)."""
+"""Bakeoff-proven Spectroformer / NU2Net inference (Windows CUDA, Apple MPS, or WSL)."""
 from __future__ import annotations
 
 import argparse
@@ -20,6 +20,26 @@ SPECTRO_CKPT = SPECTRO_ROOT / "checkpoints" / "best.pth"
 NU2_CKPT = NU2_ROOT / "checkpoints" / "UIEB" / "NU2Net.ckpt"
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+
+
+def pick_device(requested: str) -> torch.device:
+    """cuda → mps → cpu, or honor an explicit non-auto request when available."""
+    req = (requested or "auto").lower()
+    if req == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    if req == "cuda":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        raise SystemExit("CUDA requested but torch.cuda.is_available() is False")
+    if req == "mps":
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return torch.device("mps")
+        raise SystemExit("MPS requested but not available")
+    return torch.device(req)
 
 
 def list_images(path: Path) -> list[Path]:
@@ -132,7 +152,11 @@ def main() -> int:
         default=1536,
         help="Resize so max(w,h)=this before enhance (0=keep source size)",
     )
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument(
+        "--device",
+        default="auto",
+        help="auto (cuda→mps→cpu), or cuda / mps / cpu",
+    )
     args = ap.parse_args()
 
     if not args.input.exists():
@@ -151,9 +175,7 @@ def main() -> int:
         out_dir.mkdir(parents=True, exist_ok=True)
         single_out = None
 
-    device = torch.device(
-        args.device if args.device != "cuda" or torch.cuda.is_available() else "cpu"
-    )
+    device = pick_device(args.device)
     t0 = time.time()
     peak = 0.0
 

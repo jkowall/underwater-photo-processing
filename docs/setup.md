@@ -6,7 +6,18 @@ Use Python 3.12 and a dedicated virtual environment. The pinned versions in
 `requirements.txt` reproduce the reference dependency set. Do not install into
 system Python or upload photos to a service to use this processor.
 
-On macOS/Linux:
+On macOS (Apple Silicon):
+
+```bash
+bash scripts/setup.sh
+bash scripts/process.sh /path/to/NEFs
+```
+
+`setup.sh` installs classical deps, MPS torch (`requirements-neural-macos.txt`),
+and fetches neural repos when possible. Full neural setup:
+[neural-setup.md](neural-setup.md).
+
+On macOS/Linux classical-only:
 
 ```bash
 python3.12 -m venv .venv
@@ -14,11 +25,11 @@ python3.12 -m venv .venv
 .venv/bin/python scripts/process_batch.py --help
 ```
 
-`bash scripts/setup.sh` performs the same steps. Set `PYTHON_BIN` if the
-interpreter has another name. The shell helper does not install Python itself.
+`bash scripts/setup.sh` performs the same classical steps (and neural on Darwin).
+Set `PYTHON_BIN` if the interpreter has another name.
 
 `.\scripts\setup.ps1` installs classical deps into `.venv` and prints a
-checklist for neural GPU looks (WSL2, micromamba env `uw_eval`, Spectroformer
+checklist for neural GPU looks (Windows CUDA, WSL fallback, Spectroformer
 and NU2Net checkpoints under `eval/repos/`). Full neural setup:
 [neural-setup.md](neural-setup.md). Then:
 
@@ -28,13 +39,14 @@ and NU2Net checkpoints under `eval/repos/`). Full neural setup:
 
 Default look is **auto** (sibling `{input}-auto`). UW-only GPU:
 `-Look spectroformer`. Classical CPU: `-Look vivid`. Fast GPU alternate:
-`-Look nu2net`. The wrapper always passes `--resume`. Drop a folder onto
-`process.cmd` for the same defaults.
+`-Look nu2net`. The wrapper always passes `--resume` and opens the output
+folder on success (`-NoOpen` to skip). Drop a folder onto `process.cmd`
+for the same defaults.
 
-Windows classical processing uses the standard Python `.venv`. Neural looks
-prefer Windows CUDA torch (`requirements-neural.txt`); WSL `uw_eval` is a
-fallback. Binary-wheel availability for classical deps can depend on your
-platform and Python version.
+Windows neural looks prefer CUDA torch (`requirements-neural.txt`); WSL
+`uw_eval` is a fallback. Apple Silicon uses MPS
+(`requirements-neural-macos.txt`). Binary-wheel availability for classical
+deps can depend on your platform and Python version.
 
 ## Optional agent skill
 
@@ -57,11 +69,12 @@ first. Examples:
 
 - **Missing module:** use the Python executable inside the configured virtual
   environment, including when an agent invokes the installed skill.
-- **Spectroformer / nu2net fails:** ensure `pip install -r requirements-neural.txt`
-  gives `torch.cuda.is_available() == True`, weights exist at
-  `eval/repos/spectroformer/checkpoints/best.pth` (and NU2Net path if used),
-  and/or WSL `uw_eval` works as fallback. Re-run `.\scripts\setup.ps1`.
-  Fall back with `-Look vivid`.
+- **Spectroformer / nu2net fails:** ensure GPU torch is installed
+  (`requirements-neural.txt` → `torch.cuda.is_available()`, or on Mac
+  `requirements-neural-macos.txt` → `torch.backends.mps.is_available()`),
+  weights exist at `eval/repos/spectroformer/checkpoints/best.pth` (and NU2Net
+  path if used), and/or WSL `uw_eval` works as Windows fallback. Re-run
+  `.\scripts\setup.ps1` or `bash scripts/setup.sh`. Fall back with `-Look vivid`.
 - **Unsupported NEF or missing full-size JPEG:** this release does not implement
   a sensor-RAW decoder fallback. Use a compatible source or develop the RAW in
   a RAW-capable application; JPEG/TIFF imports are not supported by this CLI yet.

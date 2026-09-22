@@ -4,9 +4,11 @@ Updated: 2026-09-22. Classical OpenCV recipe notes; CLI default look is separate
 
 ## CLI default vs classical recipe
 
-- **Product CLI default** (`process.ps1`): **`auto`** (spectroformer underwater,
-  natural topside). See [docs/neural-setup.md](../docs/neural-setup.md).
-  Use `-Look spectroformer` for UW-only batches.
+- **Product CLI default** (`process.ps1` / `process.sh`): **`auto`**
+  (spectroformer underwater, natural topside). See
+  [docs/neural-setup.md](../docs/neural-setup.md). Use `-Look spectroformer` /
+  `--look spectroformer` for UW-only batches. Neural backends: Windows CUDA,
+  Apple Silicon MPS, or WSL fallback.
 - **Classical OpenCV default** when using `-Look vivid`: the V4 vivid treatment
   below. Still the approved non-neural recipe for CPU-only or fallback runs.
 

@@ -1,4 +1,4 @@
-"""Reusable NEF correction runner. Classical looks are local; neural looks use WSL uw_eval."""
+"""Reusable NEF correction runner. Classical looks are local; neural looks use native GPU or WSL."""
 from pathlib import Path
 import argparse
 import json
@@ -207,13 +207,17 @@ def resolve_auto_look(rgb):
     return 'spectroformer' if classic == 'vivid' else 'natural'
 
 
-def windows_torch_cuda_ok() -> bool:
-    """True if the current interpreter can import torch with CUDA."""
+def native_torch_device() -> str | None:
+    """Return 'cuda', 'mps', or None for the current interpreter."""
     try:
         import torch
-        return bool(torch.cuda.is_available())
+        if torch.cuda.is_available():
+            return 'cuda'
+        if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
+            return 'mps'
     except Exception:
-        return False
+        return None
+    return None
 
 
 def check_neural_prereqs(look):
@@ -223,20 +227,22 @@ def check_neural_prereqs(look):
     if not ckpt.is_file():
         raise RuntimeError(
             f'Missing {look} weights at {ckpt}. '
-            'Run .\\scripts\\fetch_neural_weights.ps1 and place checkpoints under eval/repos.'
+            'Run scripts/fetch_neural_weights.ps1 (Windows) or '
+            'scripts/fetch_neural_weights.sh (macOS/Linux) and place checkpoints under eval/repos.'
         )
-    if windows_torch_cuda_ok():
+    if native_torch_device() is not None:
         return
     if shutil.which('wsl') is None:
         raise RuntimeError(
             f'Look {look} needs GPU torch in this venv '
-            '(pip install -r requirements-neural.txt) or WSL2 uw_eval. '
-            'Neither Windows CUDA torch nor wsl.exe is available.'
+            '(pip install -r requirements-neural.txt on Windows, or '
+            'requirements-neural-macos.txt on Apple Silicon) or WSL2 uw_eval. '
+            'Neither native CUDA/MPS torch nor wsl.exe is available.'
         )
 
 
 def run_neural_native(look: str, rgb_path: Path, out_png: Path) -> str:
-    """Run run_uie_look.py in the current Windows venv (CUDA)."""
+    """Run run_uie_look.py in the current venv (CUDA or Apple MPS)."""
     completed = subprocess.run(
         [
             sys.executable,
@@ -245,6 +251,7 @@ def run_neural_native(look: str, rgb_path: Path, out_png: Path) -> str:
             '--input', str(rgb_path),
             '--output', str(out_png),
             '--long-edge', str(NEURAL_LONG_EDGE),
+            '--device', 'auto',
         ],
         capture_output=True,
         text=True,
@@ -271,7 +278,7 @@ def run_neural_wsl(look: str, rgb_path: Path, out_png: Path) -> str:
         'eval "$(/home/jkowall/micromamba/bin/micromamba shell hook -s bash)" && '
         'micromamba activate uw_eval && '
         f'python "{wsl_runner}" --look {look} --input "{wsl_in}" --output "{wsl_out}" '
-        f'--long-edge {NEURAL_LONG_EDGE}'
+        f'--long-edge {NEURAL_LONG_EDGE} --device auto'
     )
     completed = subprocess.run(
         ['wsl', '-e', 'bash', '-lc', inner],
@@ -290,17 +297,19 @@ def run_neural_wsl(look: str, rgb_path: Path, out_png: Path) -> str:
 
 
 def run_neural(look: str, rgb_path: Path, out_png: Path) -> str:
-    """Prefer native Windows CUDA; fall back to WSL uw_eval."""
+    """Prefer native CUDA/MPS; fall back to WSL uw_eval on Windows."""
     check_neural_prereqs(look)
-    if windows_torch_cuda_ok():
+    device = native_torch_device()
+    if device is not None:
         try:
             log = run_neural_native(look, rgb_path, out_png)
-            print(f'Neural backend: windows-cuda ({look})', flush=True)
+            label = f'windows-{device}' if os.name == 'nt' else f'native-{device}'
+            print(f'Neural backend: {label} ({look})', flush=True)
             return log
         except RuntimeError as err:
             if shutil.which('wsl') is None:
                 raise
-            print(f'Native CUDA failed ({err}); trying WSL…', flush=True)
+            print(f'Native {device} failed ({err}); trying WSL…', flush=True)
     log = run_neural_wsl(look, rgb_path, out_png)
     print(f'Neural backend: wsl-uw_eval ({look})', flush=True)
     return log
@@ -458,7 +467,7 @@ def main():
         choices=['natural', 'pop', 'vivid', 'auto', 'spectroformer', 'nu2net'],
         default='auto',
         help='auto (default): spectroformer underwater, natural topside. '
-             'spectroformer/nu2net are GPU looks via WSL uw_eval. '
+             'spectroformer/nu2net are GPU looks (native CUDA/MPS, or WSL fallback). '
              'vivid/natural/pop are classical CPU looks.',
     )
     p.add_argument('--resume', action='store_true', help='Skip outputs matching source, recipe, dependencies and PNG checksums')

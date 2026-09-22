@@ -7,8 +7,8 @@ description: Correct underwater photos and batches in Python, including water ca
 
 Process the actual image pixels when the user requests this computational
 workflow. Classical looks use OpenCV/NumPy locally. GPU looks
-(`spectroformer`, `nu2net`) call WSL `uw_eval` models — credit upstream authors
-per [THIRD_PARTY.md](THIRD_PARTY.md).
+(`spectroformer`, `nu2net`) use native CUDA/MPS torch (WSL fallback on Windows)
+— credit upstream authors per [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Preferences and current state
 
@@ -17,7 +17,8 @@ per [THIRD_PARTY.md](THIRD_PARTY.md).
 - Default CLI look is **`auto`** (spectroformer underwater, natural topside).
   Classical maintainer-approved OpenCV recipe remains `--look vivid`.
   Force `--look spectroformer` for UW-only folders. Neural looks prefer
-  Windows CUDA in `.venv`; WSL `uw_eval` is fallback.
+  native GPU torch in `.venv` (Windows CUDA or Apple Silicon MPS); WSL
+  `uw_eval` is the Windows fallback.
 - You do **not** retrain models per photo batch; run inference with existing
   weights. Retrain only for deliberate domain adaptation with paired data.
   When the user asks to retrain / fine-tune / domain-adapt UIE weights, follow

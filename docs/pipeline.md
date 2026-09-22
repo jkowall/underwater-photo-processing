@@ -26,7 +26,7 @@ and bright near-neutral whites. See the [recipe](../references/current-treatment
 for exact parameters and initial validation.
 
 GPU looks (`spectroformer`, `nu2net`) skip this classical chain and call
-`eval/scripts/run_uie_look.py` via WSL — see [neural-setup.md](neural-setup.md).
+`eval/scripts/run_uie_look.py` on native CUDA/MPS (or WSL fallback) — see [neural-setup.md](neural-setup.md).
 
 ## Noise and particulate are different
 

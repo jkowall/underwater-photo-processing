@@ -30,6 +30,7 @@ eval/compare/
 eval/logs/
 eval/scenes/
 eval/data/
+eval/_smoke_nef/
 **/checkpoints/
 **/*.pth
 **/*.ckpt

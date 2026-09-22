@@ -3,7 +3,7 @@
 ## Start a run
 
 On Windows, start with the one-liner. Default look is **`auto`** (underwater →
-spectroformer via WSL; topside → natural). It writes to a sibling `{input}-auto`
+spectroformer on GPU; topside → natural). It writes to a sibling `{input}-auto`
 folder when `-Output` is omitted, and always resumes verified PNGs:
 
 ```powershell
@@ -14,7 +14,16 @@ folder when `-Output` is omitted, and always resumes verified PNGs:
 ```
 
 Drop a NEF folder onto `process.cmd` for the same defaults. Classical CPU:
-`-Look vivid`. UW-only GPU folder: `-Look spectroformer`.
+`-Look vivid`. UW-only GPU folder: `-Look spectroformer`. On success the
+wrapper opens the output folder (`-NoOpen` to skip).
+
+macOS:
+
+```bash
+bash scripts/process.sh /path/to/NEFs
+bash scripts/process.sh /path/to/NEFs --look spectroformer
+bash scripts/process.sh /path/to/NEFs --output /path/to/throwaway --no-open
+```
 
 Select a few representative photos first: a close subject, bright whites,
 and a wide or hazy scene. Review full-size crops for lost detail and artificial
@@ -28,10 +37,11 @@ color before running a new collection through the same preset.
 If `--output` is omitted, the runner writes to a sibling `{input}-{look}` folder.
 The directory scan is non-recursive and accepts `.nef` case-insensitively.
 Duplicate filename stems are rejected to prevent output collisions. Original
-NEFs are read-only. Processing is sequential. Neural looks call WSL; classical
-looks stay in the local venv. Progress lines include elapsed time and an ETA
-after the first processed image. The end-of-run summary reports
-completed/processed/resumed/failed counts, output size, and elapsed time.
+NEFs are read-only. Processing is sequential. Neural looks use native CUDA/MPS
+(or WSL fallback on Windows); classical looks stay in the local venv. Progress
+lines include elapsed time and an ETA after the first processed image. The
+end-of-run summary reports completed/processed/resumed/failed counts, output
+size, and elapsed time.
 
 Allow roughly 60 MB per 45 MP PNG as an initial estimate, plus room for previews,
 reports, and in-progress files. Actual size depends on texture and noise.
