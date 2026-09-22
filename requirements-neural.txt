@@ -1,0 +1,8 @@
+# Optional GPU looks (spectroformer / nu2net) on Windows.
+# Install into the same .venv as requirements.txt:
+#   .venv\Scripts\python.exe -m pip install -r requirements-neural.txt
+#
+# Uses the official PyTorch CUDA 12.8 wheels (RTX 40/50-class on recent drivers).
+--index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128

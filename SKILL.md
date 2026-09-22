@@ -16,7 +16,8 @@ per [THIRD_PARTY.md](THIRD_PARTY.md).
   capture dates. Keep originals and earlier accepted/reviewable versions.
 - Default CLI look is **`auto`** (spectroformer underwater, natural topside).
   Classical maintainer-approved OpenCV recipe remains `--look vivid`.
-  Force `--look spectroformer` for UW-only folders.
+  Force `--look spectroformer` for UW-only folders. Neural looks prefer
+  Windows CUDA in `.venv`; WSL `uw_eval` is fallback.
 - You do **not** retrain models per photo batch; run inference with existing
   weights. Retrain only for deliberate domain adaptation with paired data.
   When the user asks to retrain / fine-tune / domain-adapt UIE weights, follow

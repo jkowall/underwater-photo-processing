@@ -6,6 +6,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from importlib.metadata import version
@@ -206,6 +207,15 @@ def resolve_auto_look(rgb):
     return 'spectroformer' if classic == 'vivid' else 'natural'
 
 
+def windows_torch_cuda_ok() -> bool:
+    """True if the current interpreter can import torch with CUDA."""
+    try:
+        import torch
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
 def check_neural_prereqs(look):
     if not RUN_UIE.is_file():
         raise RuntimeError(f'Missing neural runner: {RUN_UIE}')
@@ -213,22 +223,50 @@ def check_neural_prereqs(look):
     if not ckpt.is_file():
         raise RuntimeError(
             f'Missing {look} weights at {ckpt}. '
-            'Run bakeoff weight setup or copy checkpoints into eval/repos.'
+            'Run .\\scripts\\fetch_neural_weights.ps1 and place checkpoints under eval/repos.'
         )
+    if windows_torch_cuda_ok():
+        return
     if shutil.which('wsl') is None:
         raise RuntimeError(
-            f'Look {look} requires WSL2 with micromamba env uw_eval (torch+CUDA). '
-            'wsl.exe was not found on PATH.'
+            f'Look {look} needs GPU torch in this venv '
+            '(pip install -r requirements-neural.txt) or WSL2 uw_eval. '
+            'Neither Windows CUDA torch nor wsl.exe is available.'
         )
+
+
+def run_neural_native(look: str, rgb_path: Path, out_png: Path) -> str:
+    """Run run_uie_look.py in the current Windows venv (CUDA)."""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(RUN_UIE),
+            '--look', look,
+            '--input', str(rgb_path),
+            '--output', str(out_png),
+            '--long-edge', str(NEURAL_LONG_EDGE),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    log = (completed.stdout or '') + (completed.stderr or '')
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f'Native {look} failed (exit {completed.returncode}).\n{log[-2000:]}'
+        )
+    if not out_png.is_file():
+        raise RuntimeError(f'Native {look} produced no output at {out_png}\n{log[-2000:]}')
+    return log
 
 
 def run_neural_wsl(look: str, rgb_path: Path, out_png: Path) -> str:
     """Invoke WSL uw_eval run_uie_look.py; return stderr+stdout for errors."""
-    check_neural_prereqs(look)
+    if shutil.which('wsl') is None:
+        raise RuntimeError('wsl.exe not on PATH')
     wsl_runner = win_to_wsl(RUN_UIE)
     wsl_in = win_to_wsl(rgb_path)
     wsl_out = win_to_wsl(out_png)
-    # Quote carefully for bash -lc
     inner = (
         'eval "$(/home/jkowall/micromamba/bin/micromamba shell hook -s bash)" && '
         'micromamba activate uw_eval && '
@@ -248,6 +286,23 @@ def run_neural_wsl(look: str, rgb_path: Path, out_png: Path) -> str:
         )
     if not out_png.is_file():
         raise RuntimeError(f'WSL {look} produced no output at {out_png}\n{log[-2000:]}')
+    return log
+
+
+def run_neural(look: str, rgb_path: Path, out_png: Path) -> str:
+    """Prefer native Windows CUDA; fall back to WSL uw_eval."""
+    check_neural_prereqs(look)
+    if windows_torch_cuda_ok():
+        try:
+            log = run_neural_native(look, rgb_path, out_png)
+            print(f'Neural backend: windows-cuda ({look})', flush=True)
+            return log
+        except RuntimeError as err:
+            if shutil.which('wsl') is None:
+                raise
+            print(f'Native CUDA failed ({err}); trying WSL…', flush=True)
+    log = run_neural_wsl(look, rgb_path, out_png)
+    print(f'Neural backend: wsl-uw_eval ({look})', flush=True)
     return log
 
 
@@ -273,7 +328,7 @@ def process_neural(path, output, look, recipe):
         rgb_path = tmp_dir / f'{path.stem}_rgb.png'
         enhanced_path = tmp_dir / f'{path.stem}_out.png'
         work.save(rgb_path)
-        run_neural_wsl(look, rgb_path, enhanced_path)
+        run_neural(look, rgb_path, enhanced_path)
         enhanced = Image.open(enhanced_path).convert('RGB')
         if enhanced.size != (w, h):
             enhanced = enhanced.resize((w, h), Image.BICUBIC)

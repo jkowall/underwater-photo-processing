@@ -32,8 +32,9 @@ Default look is **auto** (sibling `{input}-auto`). UW-only GPU:
 `process.cmd` for the same defaults.
 
 Windows classical processing uses the standard Python `.venv`. Neural looks
-call WSL `uw_eval` (torch+CUDA). Binary-wheel availability for classical deps
-can depend on your platform and Python version.
+prefer Windows CUDA torch (`requirements-neural.txt`); WSL `uw_eval` is a
+fallback. Binary-wheel availability for classical deps can depend on your
+platform and Python version.
 
 ## Optional agent skill
 
@@ -56,11 +57,11 @@ first. Examples:
 
 - **Missing module:** use the Python executable inside the configured virtual
   environment, including when an agent invokes the installed skill.
-- **Spectroformer / nu2net fails:** ensure WSL2 works (`wsl -e echo ok`),
-  micromamba env `uw_eval` has torch+CUDA, and weights exist at
-  `eval/repos/spectroformer/checkpoints/best.pth` and
-  `eval/repos/uie_benchmark/checkpoints/UIEB/NU2Net.ckpt`. Re-run
-  `.\scripts\setup.ps1` to print the checklist. Fall back with `-Look vivid`.
+- **Spectroformer / nu2net fails:** ensure `pip install -r requirements-neural.txt`
+  gives `torch.cuda.is_available() == True`, weights exist at
+  `eval/repos/spectroformer/checkpoints/best.pth` (and NU2Net path if used),
+  and/or WSL `uw_eval` works as fallback. Re-run `.\scripts\setup.ps1`.
+  Fall back with `-Look vivid`.
 - **Unsupported NEF or missing full-size JPEG:** this release does not implement
   a sensor-RAW decoder fallback. Use a compatible source or develop the RAW in
   a RAW-capable application; JPEG/TIFF imports are not supported by this CLI yet.

@@ -22,23 +22,38 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host 'Classical pipeline Ready. Run .venv\Scripts\python.exe scripts\process_batch.py --help'
 
 Write-Host ''
+Write-Host 'Installing Windows CUDA torch (requirements-neural.txt)...'
+& .\.venv\Scripts\python.exe -m pip install -r requirements-neural.txt
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '[warn] requirements-neural.txt failed; neural looks can still use WSL uw_eval'
+} else {
+    & .\.venv\Scripts\python.exe -c "import torch; print('windows torch', torch.__version__, 'cuda', torch.cuda.is_available())"
+}
+
+Write-Host ''
 Write-Host 'Fetching neural repos/weights (skip clones that already exist)...'
 & (Join-Path $PSScriptRoot 'fetch_neural_weights.ps1')
 if ($LASTEXITCODE -ne 0) {
     Write-Host '[warn] fetch_neural_weights.ps1 reported a problem; classical looks still work'
 }
 
-# Neural looks (spectroformer / nu2net) require WSL2 + micromamba env uw_eval.
+# Neural looks (spectroformer / nu2net): prefer Windows CUDA, else WSL uw_eval.
 $spectro = Join-Path (Get-Location) 'eval\repos\spectroformer\checkpoints\best.pth'
 $nu2 = Join-Path (Get-Location) 'eval\repos\uie_benchmark\checkpoints\UIEB\NU2Net.ckpt'
 $runner = Join-Path (Get-Location) 'eval\scripts\run_uie_look.py'
 
 Write-Host ''
 Write-Host 'Neural GPU looks checklist (default CLI look: auto):'
-if (Get-Command wsl -ErrorAction SilentlyContinue) {
-    Write-Host '  [ok] wsl.exe on PATH'
+$winCuda = & .\.venv\Scripts\python.exe -c "import torch; print('yes' if torch.cuda.is_available() else 'no')" 2>$null
+if ($winCuda -eq 'yes') {
+    Write-Host '  [ok] Windows .venv torch+CUDA (preferred backend)'
 } else {
-    Write-Host '  [missing] wsl.exe — install WSL2 for spectroformer/nu2net'
+    Write-Host '  [missing] Windows CUDA torch — will try WSL if available'
+}
+if (Get-Command wsl -ErrorAction SilentlyContinue) {
+    Write-Host '  [ok] wsl.exe on PATH (fallback backend)'
+} else {
+    Write-Host '  [missing] wsl.exe — needed only if Windows CUDA is unavailable'
 }
 if (Test-Path $runner) {
     Write-Host "  [ok] runner $runner"
@@ -59,7 +74,7 @@ if (Test-Path $nu2) {
 $envCheck = @'
 eval "$(/home/jkowall/micromamba/bin/micromamba shell hook -s bash)" && micromamba activate uw_eval && python -c "import torch; print(\"uw_eval torch\", torch.__version__, \"cuda\", torch.cuda.is_available())"
 '@
-if (Get-Command wsl -ErrorAction SilentlyContinue) {
+if ((Get-Command wsl -ErrorAction SilentlyContinue) -and ($winCuda -ne 'yes')) {
     $out = & wsl -e bash -lc $envCheck 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  [ok] $out"

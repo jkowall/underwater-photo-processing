@@ -6,10 +6,11 @@ lossless PNGs.
 
 The default **`auto`** look routes underwater frames through **spectroformer**
 (GPU via WSL) and topside/sunset through classical **natural**, so mixed dive
-days are safer. Force `-Look spectroformer` for UW-only folders. Classical CPU
-looks (`vivid`, `pop`, `natural`) run in the Windows `.venv` with OpenCV/NumPy
-only — no API keys or cloud services. Spectroformer needs **WSL2 + micromamba
-env `uw_eval`** with CUDA torch.
+days are safer. Force `-Look spectroformer` for UW-only folders. Classical CPU looks
+(`vivid`, `pop`, `natural`) run in the Windows `.venv` with OpenCV/NumPy only —
+no API keys or cloud services. Spectroformer prefers **Windows CUDA torch** in
+the same `.venv` (`requirements-neural.txt`); **WSL2 `uw_eval`** remains a
+fallback if native CUDA is unavailable.
 
 **Current input support:** Nikon NEFs containing an unrotated, full-resolution
 embedded JPEG whose dimensions match the RAW crop. This is deliberately the
