@@ -99,7 +99,7 @@ class ResumeTests(unittest.TestCase):
 
     def test_collision_does_not_overwrite_files_or_leave_lock(self):
         original=self.dest.read_bytes()
-        with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out)]):
+        with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out),'--look','vivid']):
             with self.assertRaises(SystemExit) as error:runner.main()
         self.assertEqual(error.exception.code,2)
         self.assertEqual(self.dest.read_bytes(),original)
@@ -107,7 +107,7 @@ class ResumeTests(unittest.TestCase):
 
     def test_existing_lock_is_not_removed(self):
         (self.out/'.processing.lock').mkdir()
-        with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out)]):
+        with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out),'--look','vivid']):
             with self.assertRaises(SystemExit):runner.main()
         self.assertTrue((self.out/'.processing.lock').exists())
 
@@ -115,7 +115,7 @@ class ResumeTests(unittest.TestCase):
         lock=self.out/'.processing.lock';lock.mkdir()
         (lock/'pid').write_text('99999999',encoding='utf-8')
         stderr=StringIO()
-        with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out)]):
+        with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out),'--look','vivid']):
             with patch.object(sys,'stderr',stderr):
                 with self.assertRaises(SystemExit):runner.main()
         self.assertIn('99999999 is not running',stderr.getvalue())
@@ -125,7 +125,7 @@ class ResumeTests(unittest.TestCase):
         self.record['recipe_id']=runner.recipe_id('vivid')
         runner.write_json(self.out/'reports'/'source.json',self.record)
         with patch.object(runner,'process') as processed:
-            with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out),'--resume']):
+            with patch.object(sys,'argv',['process_batch','--input',str(self.src),'--output',str(self.out),'--look','vivid','--resume']):
                 self.assertFalse(runner.main())
         processed.assert_not_called()
         summary=json.loads((self.out/'batch_summary.json').read_text(encoding='utf-8'))
@@ -140,13 +140,20 @@ class CliTests(unittest.TestCase):
             src=root/'Day4 onwards';src.mkdir()
             (src/'a.NEF').write_bytes(b'NEF')
             self.assertEqual(runner.default_output_path(src,'vivid'),root/'Day4 onwards-vivid')
+            self.assertEqual(runner.default_output_path(src,'spectroformer'),root/'Day4 onwards-spectroformer')
             with patch.object(runner,'process',return_value={'name':'a_vivid.png','dimensions':[1,1],'bytes':10}):
-                with patch.object(sys,'argv',['process_batch','--input',str(src)]):
+                with patch.object(sys,'argv',['process_batch','--input',str(src),'--look','vivid']):
                     self.assertFalse(runner.main())
             dest=root/'Day4 onwards-vivid'
             self.assertTrue((dest/'batch_summary.json').is_file())
             self.assertFalse((dest/'.processing.lock').exists())
-
+            with patch.object(runner,'process',return_value={'name':'a_spectroformer.png','dimensions':[1,1],'bytes':10}):
+                with patch.object(runner,'check_neural_prereqs'):
+                    with patch.object(sys,'argv',['process_batch','--input',str(src)]):
+                        self.assertFalse(runner.main())
+            dest_sf=root/'Day4 onwards-spectroformer'
+            self.assertTrue((dest_sf/'batch_summary.json').is_file())
+            self.assertFalse((dest_sf/'.processing.lock').exists())
     def test_format_duration(self):
         self.assertEqual(runner.format_duration(12),'12s')
         self.assertEqual(runner.format_duration(130),'2m10s')

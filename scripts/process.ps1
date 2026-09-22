@@ -3,8 +3,8 @@ param(
     [Parameter(Position = 0, Mandatory = $true)]
     [string]$InputPath,
     [string]$Output,
-    [ValidateSet('natural', 'pop', 'vivid', 'auto')]
-    [string]$Look = 'vivid'
+    [ValidateSet('natural', 'pop', 'vivid', 'auto', 'spectroformer', 'nu2net')]
+    [string]$Look = 'spectroformer'
 )
 
 $ErrorActionPreference = 'Stop'

@@ -19,4 +19,49 @@ Invoke-Python312 @('-m', 'venv', '.venv')
 if ($LASTEXITCODE -ne 0) {
     throw "pip install failed with exit code $LASTEXITCODE"
 }
-Write-Host 'Ready. Run .venv\Scripts\python.exe scripts\process_batch.py --help'
+Write-Host 'Classical pipeline Ready. Run .venv\Scripts\python.exe scripts\process_batch.py --help'
+
+# Neural looks (spectroformer / nu2net) require WSL2 + micromamba env uw_eval.
+$spectro = Join-Path (Get-Location) 'eval\repos\spectroformer\checkpoints\best.pth'
+$nu2 = Join-Path (Get-Location) 'eval\repos\uie_benchmark\checkpoints\UIEB\NU2Net.ckpt'
+$runner = Join-Path (Get-Location) 'eval\scripts\run_uie_look.py'
+
+Write-Host ''
+Write-Host 'Neural GPU looks (default: spectroformer) checklist:'
+if (Get-Command wsl -ErrorAction SilentlyContinue) {
+    Write-Host '  [ok] wsl.exe on PATH'
+} else {
+    Write-Host '  [missing] wsl.exe — install WSL2 for spectroformer/nu2net'
+}
+if (Test-Path $runner) {
+    Write-Host "  [ok] runner $runner"
+} else {
+    Write-Host "  [missing] $runner"
+}
+if (Test-Path $spectro) {
+    Write-Host "  [ok] Spectroformer weights"
+} else {
+    Write-Host "  [missing] $spectro"
+}
+if (Test-Path $nu2) {
+    Write-Host "  [ok] NU2Net weights"
+} else {
+    Write-Host "  [missing] $nu2"
+}
+
+$envCheck = @'
+eval "$(/home/jkowall/micromamba/bin/micromamba shell hook -s bash)" && micromamba activate uw_eval && python -c "import torch; print(\"uw_eval torch\", torch.__version__, \"cuda\", torch.cuda.is_available())"
+'@
+if (Get-Command wsl -ErrorAction SilentlyContinue) {
+    $out = & wsl -e bash -lc $envCheck 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  [ok] $out"
+    } else {
+        Write-Host '  [missing] micromamba env uw_eval with torch+CUDA'
+        Write-Host "           $out"
+    }
+}
+
+Write-Host ''
+Write-Host 'Default: .\scripts\process.ps1 <NEF-folder>  (spectroformer via WSL)'
+Write-Host 'Classical CPU: .\scripts\process.ps1 <NEF-folder> -Look vivid'

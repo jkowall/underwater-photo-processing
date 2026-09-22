@@ -5,28 +5,28 @@ description: Correct underwater photos and batches in Python, including water ca
 
 # Underwater photo processing
 
-Process the actual image pixels using Python, OpenCV, and NumPy when the user
-requests this computational workflow. Local processing uses no model API
-calls. Model usage comes from orchestration and visual review, not each photo's
-pixel computations.
+Process the actual image pixels when the user requests this computational
+workflow. Classical looks use OpenCV/NumPy locally. GPU looks
+(`spectroformer`, `nu2net`) call WSL `uw_eval` models — credit upstream authors
+per [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Preferences and current state
 
 - Deliver full-resolution lossless PNG with an sRGB profile and original camera
   capture dates. Keep originals and earlier accepted/reviewable versions.
-- Use `--look vivid` as the maintainer-approved default: stronger color with
-  denoising and conservative particulate cleanup. Adapt to user preferences
-  when they request a different treatment. `--look auto` classifies a small
-  preview and uses `vivid` underwater and `natural` topside/sunset; do not
-  change vivid numerics on underwater frames.
-- Read [references/current-treatment.md](references/current-treatment.md) before
-  continuing this project. It records the approved treatment, tested settings,
-  and source limitations. Assess representative images for a new batch rather
+- Default CLI look is **`spectroformer`** (GPU via WSL). Classical
+  maintainer-approved OpenCV recipe remains `--look vivid`. `--look auto`
+  uses spectroformer underwater and natural topside/sunset.
+- You do **not** retrain models per photo batch; run inference with existing
+  weights. Retrain only for deliberate domain adaptation with paired data.
+  When the user asks to retrain / fine-tune / domain-adapt UIE weights, follow
+  the project skill [`.cursor/skills/uie-retrain/SKILL.md`](.cursor/skills/uie-retrain/SKILL.md).
+- Read [references/current-treatment.md](references/current-treatment.md) for
+  the classical recipe. Assess representative images for a new batch rather
   than assuming every scene needs identical correction.
 - When authorized to maintain this skill, incorporate material feedback into
   the treatment reference and any changed helper. Keep settled decisions concise;
   replace superseded recommendations. Do not infer permission for unrelated edits.
-
 ## Working method
 
 Inspect source format, dimensions, color profile, channel statistics, and several

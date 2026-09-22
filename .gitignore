@@ -21,3 +21,15 @@ previews/
 *.log
 .env
 .env.*
+
+# Eval clones / weights (large; upstream licenses vary — see THIRD_PARTY.md)
+eval/repos/
+eval/out/
+eval/stills/
+eval/compare/
+eval/logs/
+eval/scenes/
+eval/data/
+**/checkpoints/
+**/*.pth
+**/*.ckpt

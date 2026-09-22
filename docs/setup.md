@@ -17,18 +17,22 @@ python3.12 -m venv .venv
 `bash scripts/setup.sh` performs the same steps. Set `PYTHON_BIN` if the
 interpreter has another name. The shell helper does not install Python itself.
 
-`.\scripts\setup.ps1` performs the same steps on Windows (via `py -3.12`, or
-`PYTHON_BIN` if set). Then:
+`.\scripts\setup.ps1` installs classical deps into `.venv` and prints a
+checklist for neural GPU looks (WSL2, micromamba env `uw_eval`, Spectroformer
+and NU2Net checkpoints under `eval/repos/`). Full neural setup:
+[neural-setup.md](neural-setup.md). Then:
 
 ```powershell
 .\scripts\process.ps1 "D:\path\to\NEFs"
 ```
 
-If `-Output` is omitted, PNGs go to a sibling `{input}-vivid` folder. The
-wrapper always passes `--resume`. Drop a folder onto `process.cmd` for the
-same defaults. Windows instructions describe the standard Python setup;
-full-resolution NEF processing was originally validated on macOS, not Windows.
-Binary-wheel availability can depend on your platform and Python version.
+Default look is **spectroformer** (sibling `{input}-spectroformer`). Classical
+CPU: `-Look vivid`. Fast GPU alternate: `-Look nu2net`. The wrapper always
+passes `--resume`. Drop a folder onto `process.cmd` for the same defaults.
+
+Windows classical processing uses the standard Python `.venv`. Neural looks
+call WSL `uw_eval` (torch+CUDA). Binary-wheel availability for classical deps
+can depend on your platform and Python version.
 
 ## Optional Codex skill
 
@@ -45,6 +49,11 @@ Use `--destination /path/to/skill-folder` to test an installation elsewhere.
 
 - **Missing module:** use the Python executable inside the configured virtual
   environment, including when an agent invokes the installed skill.
+- **Spectroformer / nu2net fails:** ensure WSL2 works (`wsl -e echo ok`),
+  micromamba env `uw_eval` has torch+CUDA, and weights exist at
+  `eval/repos/spectroformer/checkpoints/best.pth` and
+  `eval/repos/uie_benchmark/checkpoints/UIEB/NU2Net.ckpt`. Re-run
+  `.\scripts\setup.ps1` to print the checklist. Fall back with `-Look vivid`.
 - **Unsupported NEF or missing full-size JPEG:** this release does not implement
   a sensor-RAW decoder fallback. Use a compatible source or develop the RAW in
   a RAW-capable application; JPEG/TIFF imports are not supported by this CLI yet.
