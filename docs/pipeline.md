@@ -25,8 +25,19 @@ denoising, an adaptive black offset, an S curve, and restrained local contrast.
 and bright near-neutral whites. See the [recipe](../references/current-treatment.md)
 for exact parameters and initial validation.
 
-GPU looks (`spectroformer`, `nu2net`) skip this classical chain and call
-`eval/scripts/run_uie_look.py` on native CUDA/MPS (or WSL fallback) — see [neural-setup.md](neural-setup.md).
+GPU looks (`spectroformer`, `nu2net`) skip the classical correction chain and call
+`eval/scripts/run_uie_look.py` on native CUDA/MPS (or WSL fallback) — see
+[neural-setup.md](neural-setup.md). After inference they apply a **Phase A** finish:
+
+1. Mild Lab-L bilateral denoise on the long-edge working image (before the model).
+2. Edge-aware guided upsample to full resolution (ximgproc if present, else bilateral).
+3. Source luminance detail restore.
+4. Light classical polish (particle cleanup + reduced clarity/vibrance) and
+   `reduce_green_cast`.
+
+Classical looks are unchanged. Neural `recipe_id` includes `neural_finish=phase-a-v1`
+so older soft outputs never resume. Phase A was maintainer-approved on 2026-09-23
+after a full Day4 A/B against the prior sharp spectroformer exports.
 
 ## Noise and particulate are different
 

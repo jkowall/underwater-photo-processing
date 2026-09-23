@@ -15,7 +15,8 @@ import numpy as np
 from PIL import Image, ImageCms, ImageDraw
 from underwater_pipeline import (load_source, metadata, preview_size, estimate,
     color_correct, protect_highlights, lab_to_rgb_safe, polish, richer,
-    reduce_green_cast, classify_look, restore_source_detail)
+    reduce_green_cast, classify_look, restore_source_detail,
+    mild_pre_denoise, guided_upsample, polish_neural)
 
 _recipe_cache = {}
 
@@ -29,7 +30,8 @@ RUN_UIE = EVAL_ROOT / 'scripts' / 'run_uie_look.py'
 SPECTRO_CKPT = EVAL_ROOT / 'repos' / 'spectroformer' / 'checkpoints' / 'best.pth'
 NU2_CKPT = EVAL_ROOT / 'repos' / 'uie_benchmark' / 'checkpoints' / 'UIEB' / 'NU2Net.ckpt'
 NEURAL_LONG_EDGE = 2048
-# Spectroformer used to squash to 512²; keep working res and put source detail back.
+# Phase A neural finish: pre-denoise → model → guided upsample → detail → light polish.
+NEURAL_FINISH = 'phase-a-v1'
 
 
 def sha256(path):
@@ -67,6 +69,7 @@ def recipe_id(look):
         ckpt = SPECTRO_CKPT if look == 'spectroformer' else NU2_CKPT
         value['weights'] = sha256(ckpt) if ckpt.is_file() else 'missing-weights'
         value['neural_long_edge'] = NEURAL_LONG_EDGE
+        value['neural_finish'] = NEURAL_FINISH
     digest = hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
     _recipe_cache[look] = digest
     return digest
@@ -329,20 +332,29 @@ def process_neural(path, output, look, recipe):
     h, w = original.shape[:2]
     with tempfile.TemporaryDirectory(prefix='uie_') as tmp:
         tmp_dir = Path(tmp)
-        # Work at long-edge for the model; upsample + detail restore to full NEF size
+        # Work at long-edge: mild denoise → model → guided upsample → detail → polish
         work = Image.fromarray(original)
         scale = NEURAL_LONG_EDGE / max(w, h)
         if scale < 1.0:
             nw, nh = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
             work = work.resize((nw, nh), Image.BICUBIC)
+        work_rgb = mild_pre_denoise(np.asarray(work, dtype=np.uint8))
         rgb_path = tmp_dir / f'{path.stem}_rgb.png'
         enhanced_path = tmp_dir / f'{path.stem}_out.png'
-        work.save(rgb_path)
+        Image.fromarray(work_rgb).save(rgb_path)
         run_neural(look, rgb_path, enhanced_path)
-        enhanced = Image.open(enhanced_path).convert('RGB')
-        if enhanced.size != (w, h):
-            enhanced = enhanced.resize((w, h), Image.LANCZOS)
-        result = restore_source_detail(original, np.asarray(enhanced, dtype=np.uint8))
+        enhanced = np.asarray(Image.open(enhanced_path).convert('RGB'), dtype=np.uint8)
+        if enhanced.shape[0] != h or enhanced.shape[1] != w:
+            enhanced = guided_upsample(enhanced, original)
+        result = restore_source_detail(original, enhanced)
+        result, mask, particles, black = polish_neural(result)
+        cleanup = {
+            'candidates': len(particles),
+            'pixel_percent': 100 * float(np.count_nonzero(mask)) / mask.size,
+            'black_offset': black,
+        }
+        del mask
+        result, green_cast = reduce_green_cast(result)
 
     dest = output / (path.stem + '_' + look + '.png')
     exif, date = metadata(path, result.shape[1], result.shape[0])
@@ -379,10 +391,14 @@ def process_neural(path, output, look, recipe):
         'dimensions': list(result.shape[1::-1]), 'capture_date': str(date),
         'parameters': {
             'neural': look,
+            'neural_finish': NEURAL_FINISH,
             'long_edge': NEURAL_LONG_EDGE,
+            'pre_denoise': {'d': 5, 'sigma_color': 18.0, 'sigma_space': 4.0},
+            'guided_upsample': {'radius': 8, 'eps': 1e-2},
             'detail_restore': {'sigma': 1.6, 'amount': 1.0},
+            'polish_neural': {'clarity': 0.10, 'vibrance_gain': 0.08},
         },
-        'cleanup': None, 'green_cast': None,
+        'cleanup': cleanup, 'green_cast': green_cast,
         'before': stats(original), 'after': stats(result),
         'seconds': round(time.monotonic() - started, 2),
         'validation': 'Exact PNG pixel round trip, dimensions, capture date and ICC verified',

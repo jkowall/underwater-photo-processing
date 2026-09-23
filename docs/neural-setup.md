@@ -64,8 +64,13 @@ bash scripts/process.sh /path/to/NEFs --look vivid --no-open
 ```
 
 The batch runner prints `Neural backend: windows-cuda`, `native-mps`, or
-`wsl-uw_eval`. Spectroformer keeps the working aspect ratio (no 512² squash)
-and reinjects source luminance detail after upsample so full-res NEFs stay sharp.
+`wsl-uw_eval`. Spectroformer keeps the working aspect ratio (no 512² squash).
+**Approved** Phase A neural finish (`neural_finish=phase-a-v1`, 2026-09-23):
+mild Lab-L denoise at working res → model → guided upsample (ximgproc
+guidedFilter or bilateral fallback) → source-L detail restore → light
+particle/clarity polish → residual green-cast cleanup. Full classical `vivid`
+chroma is not applied on the neural path. Day4 full-batch A/B preferred this
+over the prior sharp spectroformer path.
 
 ## Licensing
 

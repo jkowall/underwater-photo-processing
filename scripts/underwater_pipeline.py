@@ -296,6 +296,100 @@ def reduce_green_cast(rgb, target_white_a=2.2):
                 'magenta_shift':a_needed,'olive_amount':float(olive_amt)}
 
 
+def mild_pre_denoise(rgb, d=5, sigma_color=18.0, sigma_space=4.0):
+    """Conservative working-res denoise before neural UIE so the model does not amplify grain.
+
+    Fixed mild bilateral on Lab L only (chroma untouched). ISO-aware scaling is Phase B.
+    """
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
+    diameter = d if d % 2 == 1 else d + 1
+    lab[:, :, 0] = cv2.bilateralFilter(
+        lab[:, :, 0], diameter, float(sigma_color), float(sigma_space)
+    )
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+
+def guided_upsample(enhanced, guide, radius=8, eps=1e-2):
+    """Upsample a reduced-res neural result to guide size with edge-aware filtering.
+
+    Prefers OpenCV contrib ``ximgproc.guidedFilter`` on Lab (guide = full-res source L).
+    Falls back to bilateral smoothing of the Lanczos upsample plus mild guide-edge
+    transfer when contrib is missing. Caller should still run ``restore_source_detail``.
+    """
+    if guide.ndim != 3 or enhanced.ndim != 3:
+        raise ValueError('enhanced and guide must be HxWx3 RGB')
+    h, w = guide.shape[:2]
+    if enhanced.shape[0] == h and enhanced.shape[1] == w:
+        up = enhanced
+    else:
+        up = cv2.resize(enhanced, (w, h), interpolation=cv2.INTER_LANCZOS4)
+
+    guide_lab = cv2.cvtColor(guide, cv2.COLOR_RGB2LAB).astype(np.float32)
+    up_lab = cv2.cvtColor(up, cv2.COLOR_RGB2LAB).astype(np.float32)
+    guide_l = guide_lab[:, :, 0]
+    rad = max(1, int(radius))
+    ximgproc = getattr(cv2, 'ximgproc', None)
+    if ximgproc is not None and hasattr(ximproc, 'guidedFilter'):
+        eps_scaled = float(eps) * (255.0 ** 2)
+        for channel in range(3):
+            up_lab[:, :, channel] = ximgproc.guidedFilter(
+                guide_l, up_lab[:, :, channel], rad, eps_scaled
+            )
+    else:
+        # Pure-OpenCV bilateral fallback: keep neural base, borrow guide HF edges on L.
+        diameter = rad if rad % 2 == 1 else rad + 1
+        diameter = max(3, diameter)
+        sigma_space = float(rad)
+        sigma_color = 18.0
+        base = cv2.bilateralFilter(up_lab[:, :, 0], diameter, sigma_color, sigma_space)
+        guide_base = cv2.bilateralFilter(guide_l, diameter, sigma_color, sigma_space)
+        up_lab[:, :, 0] = np.clip(base + 0.55 * (guide_l - guide_base), 0, 255)
+        for channel in (1, 2):
+            up_lab[:, :, channel] = cv2.bilateralFilter(
+                up_lab[:, :, channel], diameter, sigma_color * 1.15, sigma_space
+            )
+    return cv2.cvtColor(np.round(up_lab).astype(np.uint8), cv2.COLOR_LAB2RGB)
+
+
+def polish_neural(rgb, clarity=0.10, vibrance_gain=0.08):
+    """Light classical finish after neural detail restore (not full vivid chroma).
+
+    Particle cleanup + milder bilateral clarity / S-curve than ``polish``; vibrance
+    stays low so Spectroformer chroma is not pushed into plastic skin.
+    """
+    mask, particles = particle_mask(rgb)
+    if particles:
+        clean = cv2.inpaint(rgb, mask, 3, cv2.INPAINT_TELEA)
+    else:
+        clean = rgb
+    small = preview_size(clean, 1200)
+    sample_lab = cv2.cvtColor(small.astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
+    black = min(5.0, 0.55 * 0.42 * float(np.percentile(sample_lab[:, :, 0], 0.5)))
+    h, w = rgb.shape[:2]
+    result = np.empty_like(rgb)
+    for start in range(0, h, 384):
+        lo = max(0, start - 64)
+        hi = min(h, start + 384 + 64)
+        lab = cv2.cvtColor(clean[lo:hi].astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
+        l = cv2.bilateralFilter(lab[:, :, 0], 5, 1.2, 2)
+        for channel in (1, 2):
+            lab[:, :, channel] = cv2.bilateralFilter(lab[:, :, channel], 5, 2.0, 2)
+        local = l - cv2.GaussianBlur(l, (0, 0), 18)
+        clarity_term = float(clarity) * np.sign(local) * np.maximum(np.abs(local) - 0.7, 0)
+        denom = max(100.0 - black, 1e-3)
+        l = np.clip((l - black) * 100.0 / denom, 0, 100)
+        wave = np.sin(np.pi * l / 100)
+        l = l + 0.06 * (l - 50) * wave + 1.0 * wave
+        lab[:, :, 0] = np.clip(l + clarity_term, 0, 99)
+        chroma = np.sqrt(lab[:, :, 1] ** 2 + lab[:, :, 2] ** 2)
+        vibrance = 1.0 + float(vibrance_gain) * np.exp(-chroma / 35)
+        lab[:, :, 1:] *= vibrance[:, :, None]
+        out = np.round(lab_to_rgb_safe(lab) * 255).astype(np.uint8)
+        end = min(h, start + 384)
+        result[start:end] = out[start - lo:end - lo]
+    return result, mask, particles, black
+
+
 def restore_source_detail(original, enhanced, sigma=1.6, amount=1.0):
     """Keep neural color; reinject high-frequency luminance from the full-res source.
 
