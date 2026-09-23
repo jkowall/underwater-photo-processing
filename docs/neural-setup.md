@@ -64,7 +64,8 @@ bash scripts/process.sh /path/to/NEFs --look vivid --no-open
 ```
 
 The batch runner prints `Neural backend: windows-cuda`, `native-mps`, or
-`wsl-uw_eval`.
+`wsl-uw_eval`. Spectroformer keeps the working aspect ratio (no 512² squash)
+and reinjects source luminance detail after upsample so full-res NEFs stay sharp.
 
 ## Licensing
 

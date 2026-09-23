@@ -294,3 +294,22 @@ def reduce_green_cast(rgb, target_white_a=2.2):
     out=cv2.cvtColor(np.round(hsv).astype(np.uint8),cv2.COLOR_HSV2RGB)
     return out,{'neutral_a_cast':a_cast,'neutral_b_cast':b_cast,
                 'magenta_shift':a_needed,'olive_amount':float(olive_amt)}
+
+
+def restore_source_detail(original, enhanced, sigma=1.6, amount=1.0):
+    """Keep neural color; reinject high-frequency luminance from the full-res source.
+
+    Neural UIE is run at a reduced long-edge, then upsampled. Without this pass,
+    dive NEFs look soft/pixelated even when color is good.
+    """
+    if original.shape != enhanced.shape:
+        raise ValueError('original and enhanced must match shape for detail restore')
+    o_lab = cv2.cvtColor(original, cv2.COLOR_RGB2LAB).astype(np.float32)
+    e_lab = cv2.cvtColor(enhanced, cv2.COLOR_RGB2LAB).astype(np.float32)
+    o_l = o_lab[:, :, 0]
+    e_l = e_lab[:, :, 0]
+    o_base = cv2.GaussianBlur(o_l, (0, 0), sigma)
+    e_base = cv2.GaussianBlur(e_l, (0, 0), sigma)
+    detail = o_l - o_base
+    e_lab[:, :, 0] = np.clip(e_base + float(amount) * detail, 0, 255)
+    return cv2.cvtColor(np.round(e_lab).astype(np.uint8), cv2.COLOR_LAB2RGB)

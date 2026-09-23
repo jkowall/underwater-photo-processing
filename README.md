@@ -82,14 +82,15 @@ Originals are read-only, and existing results are never silently overwritten.
 | Look | Treatment |
 | --- | --- |
 | `auto` (default) | Underwater → `spectroformer`; topside/sunset → `natural` |
-| `spectroformer` | GPU UIE @ long-edge 1536 (infer 512→upsample); CUDA / MPS / WSL |
-| `nu2net` | Fast GPU alternate; pad-to-16; CUDA / MPS / WSL |
+| `spectroformer` | GPU UIE @ long-edge 2048 (aspect preserved) + source detail restore |
+| `nu2net` | Fast GPU alternate; pad-to-16; same long-edge + detail restore |
 | `natural` | Classical: water-cast correction, red compensation, WB, local contrast |
 | `pop` | Classical: natural + mild denoise, particle cleanup, stronger contrast |
 | `vivid` | Classical: pop + richer color (approved OpenCV recipe) |
 
-Neural looks enhance at long-edge 1536 then upsample to the source embedded-JPEG
-size for full-res PNG export. Classical looks process at full embedded resolution.
+Neural looks enhance at long-edge 2048 (aspect preserved; Spectroformer is no
+longer squashed to 512²), upsample with Lanczos, then reinject high-frequency
+luminance from the full-resolution camera JPEG so dive frames stay sharp.
 
 **Retraining:** not part of normal processing. See
 [docs/retraining.md](docs/retraining.md) (occasional domain adaptation only).

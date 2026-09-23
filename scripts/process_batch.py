@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image, ImageCms, ImageDraw
 from underwater_pipeline import (load_source, metadata, preview_size, estimate,
     color_correct, protect_highlights, lab_to_rgb_safe, polish, richer,
-    reduce_green_cast, classify_look)
+    reduce_green_cast, classify_look, restore_source_detail)
 
 _recipe_cache = {}
 
@@ -28,7 +28,8 @@ EVAL_ROOT = REPO_ROOT / 'eval'
 RUN_UIE = EVAL_ROOT / 'scripts' / 'run_uie_look.py'
 SPECTRO_CKPT = EVAL_ROOT / 'repos' / 'spectroformer' / 'checkpoints' / 'best.pth'
 NU2_CKPT = EVAL_ROOT / 'repos' / 'uie_benchmark' / 'checkpoints' / 'UIEB' / 'NU2Net.ckpt'
-NEURAL_LONG_EDGE = 1536
+NEURAL_LONG_EDGE = 2048
+# Spectroformer used to squash to 512²; keep working res and put source detail back.
 
 
 def sha256(path):
@@ -328,7 +329,7 @@ def process_neural(path, output, look, recipe):
     h, w = original.shape[:2]
     with tempfile.TemporaryDirectory(prefix='uie_') as tmp:
         tmp_dir = Path(tmp)
-        # Work at long-edge 1536 for model; upsample to full NEF size after
+        # Work at long-edge for the model; upsample + detail restore to full NEF size
         work = Image.fromarray(original)
         scale = NEURAL_LONG_EDGE / max(w, h)
         if scale < 1.0:
@@ -340,8 +341,8 @@ def process_neural(path, output, look, recipe):
         run_neural(look, rgb_path, enhanced_path)
         enhanced = Image.open(enhanced_path).convert('RGB')
         if enhanced.size != (w, h):
-            enhanced = enhanced.resize((w, h), Image.BICUBIC)
-        result = np.asarray(enhanced, dtype=np.uint8)
+            enhanced = enhanced.resize((w, h), Image.LANCZOS)
+        result = restore_source_detail(original, np.asarray(enhanced, dtype=np.uint8))
 
     dest = output / (path.stem + '_' + look + '.png')
     exif, date = metadata(path, result.shape[1], result.shape[0])
@@ -376,7 +377,11 @@ def process_neural(path, output, look, recipe):
         'recipe_id': recipe, 'source_sha256': source_hash, 'output_sha256': sha256(dest),
         'representation': 'Full-resolution embedded camera JPEG, assumed sRGB',
         'dimensions': list(result.shape[1::-1]), 'capture_date': str(date),
-        'parameters': {'neural': look, 'long_edge': NEURAL_LONG_EDGE},
+        'parameters': {
+            'neural': look,
+            'long_edge': NEURAL_LONG_EDGE,
+            'detail_restore': {'sigma': 1.6, 'amount': 1.0},
+        },
         'cleanup': None, 'green_cast': None,
         'before': stats(original), 'after': stats(result),
         'seconds': round(time.monotonic() - started, 2),

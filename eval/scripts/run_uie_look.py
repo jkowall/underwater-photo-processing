@@ -69,10 +69,28 @@ def load_spectroformer(device: torch.device):
     return model
 
 
-def infer_spectroformer(model, rgb: Image.Image, device: torch.device) -> Image.Image:
-    # Bakeoff: 512×512 infer, Normalize(0.5), upsample to target
+def infer_spectroformer(
+    model,
+    rgb: Image.Image,
+    device: torch.device,
+    *,
+    multiple: int = 8,
+) -> Image.Image:
+    """Run Spectroformer at the working resolution (aspect preserved).
+
+    Upstream train/test used 512×512 squares. Squashing full dive frames to 512
+    then upsampling to NEF size destroys sharpness. The network is fully
+    convolutional with 3× downsample, so H/W only need to be multiples of 8.
+    """
     target = rgb.size  # (w, h)
-    work = rgb.resize((512, 512), Image.BICUBIC)
+    w, h = target
+    pw = (multiple - (w % multiple)) % multiple
+    ph = (multiple - (h % multiple)) % multiple
+    work = rgb
+    if pw or ph:
+        canvas = Image.new("RGB", (w + pw, h + ph))
+        canvas.paste(rgb, (0, 0))
+        work = canvas
     transform = T.Compose(
         [T.ToTensor(), T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
@@ -82,12 +100,14 @@ def infer_spectroformer(model, rgb: Image.Image, device: torch.device) -> Image.
         if isinstance(out, (list, tuple)):
             out = out[0]
         out = out.detach()
-        # model outputs in [-1, 1] (save_img convention)
         out = (out + 1.0) * 0.5
         out = out.clamp(0, 1)
-        out = F.interpolate(
-            out, size=(target[1], target[0]), mode="bilinear", align_corners=False
-        )
+        if pw or ph:
+            out = out[:, :, :h, :w]
+        if out.shape[-1] != w or out.shape[-2] != h:
+            out = F.interpolate(
+                out, size=(h, w), mode="bilinear", align_corners=False
+            )
     arr = (out.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
     return Image.fromarray(arr)
 
@@ -149,7 +169,7 @@ def main() -> int:
     ap.add_argument(
         "--long-edge",
         type=int,
-        default=1536,
+        default=2048,
         help="Resize so max(w,h)=this before enhance (0=keep source size)",
     )
     ap.add_argument(
