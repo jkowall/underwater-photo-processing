@@ -1,6 +1,6 @@
 # Current treatment and observed feedback
 
-Updated: 2026-09-22. Classical OpenCV recipe notes; CLI default look is separate.
+Updated: 2026-09-23. Classical OpenCV recipe notes; CLI default look is separate.
 
 ## CLI default vs classical recipe
 
@@ -9,6 +9,14 @@ Updated: 2026-09-22. Classical OpenCV recipe notes; CLI default look is separate
   [docs/neural-setup.md](../docs/neural-setup.md). Use `-Look spectroformer` /
   `--look spectroformer` for UW-only batches. Neural backends: Windows CUDA,
   Apple Silicon MPS, or WSL fallback.
+- **Approved neural finish (Phase A, `phase-a-v1`)** as of 2026-09-23:
+  spectroformer / nu2net only. Mild pre-denoise at long-edge 2048 → model →
+  guided upsample (source as edge guide) → L detail restore → light
+  `polish_neural` (particles + reduced clarity/vibrance) → `reduce_green_cast`.
+  Classical looks are unchanged. `recipe_id` includes `neural_finish=phase-a-v1`
+  so soft/legacy neural PNGs never resume. Maintainer A/B of the full Day4 set
+  (`Day4 onwards-spectroformer` vs `Day4 onwards-spectroformer-phase-a`) preferred
+  Phase A; keep that folder for comparison until Phase B lands.
 - **Classical OpenCV default** when using `-Look vivid`: the V4 vivid treatment
   below. Still the approved non-neural recipe for CPU-only or fallback runs.
 

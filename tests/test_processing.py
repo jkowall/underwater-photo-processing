@@ -57,6 +57,52 @@ class ImageTests(unittest.TestCase):
         self.assertEqual(pipeline.classify_look(water),'vivid')
         self.assertEqual(pipeline.classify_look(sunset),'natural')
 
+    def test_mild_pre_denoise_preserves_shape_and_chroma_mean(self):
+        rng=np.random.default_rng(0)
+        rgb=np.clip(np.full((64,96,3),90,np.float32)+rng.normal(0,12,(64,96,3)),0,255).astype(np.uint8)
+        out=pipeline.mild_pre_denoise(rgb)
+        self.assertEqual(out.shape,rgb.shape)
+        before=cv2.cvtColor(rgb,cv2.COLOR_RGB2LAB).astype(np.float32)
+        after=cv2.cvtColor(out,cv2.COLOR_RGB2LAB).astype(np.float32)
+        # L should smooth slightly; a/b means stay close (no global cast shift)
+        self.assertLess(float(after[:,:,0].std()),float(before[:,:,0].std())+1e-3)
+        self.assertLess(abs(float(after[:,:,1].mean())-float(before[:,:,1].mean())),1.5)
+        self.assertLess(abs(float(after[:,:,2].mean())-float(before[:,:,2].mean())),1.5)
+
+    def test_guided_upsample_matches_guide_size(self):
+        guide=np.zeros((120,160,3),np.uint8)
+        guide[:,:80]=[40,90,120]
+        guide[:,80:]=[180,140,90]
+        # Hard vertical edge in guide
+        small=cv2.resize(guide,(40,30),interpolation=cv2.INTER_AREA)
+        small=cv2.GaussianBlur(small,(0,0),1.2)
+        up=pipeline.guided_upsample(small,guide)
+        self.assertEqual(up.shape,guide.shape)
+        # Edge energy along the mid column should not collapse vs plain Lanczos
+        plain=cv2.resize(small,(160,120),interpolation=cv2.INTER_LANCZOS4)
+        mid=up.shape[1]//2
+        guided_edge=float(np.abs(up[:,mid].astype(np.float32)-up[:,mid-1].astype(np.float32)).mean())
+        plain_edge=float(np.abs(plain[:,mid].astype(np.float32)-plain[:,mid-1].astype(np.float32)).mean())
+        self.assertGreaterEqual(guided_edge,plain_edge*0.85)
+
+    def test_polish_neural_reports_cleanup_and_is_milder_than_polish(self):
+        rgb=np.full((256,256,3),70,np.uint8)
+        cv2.circle(rgb,(80,80),5,(200,200,200),-1)
+        rgb[:,200:]=[90,130,150]
+        mild,mask,boxes,black=pipeline.polish_neural(rgb)
+        full,_,_,_=pipeline.polish(rgb)
+        self.assertTrue(boxes)
+        self.assertGreater(mask[80,80],0)
+        self.assertIsInstance(black,float)
+        mild_lab=cv2.cvtColor(mild.astype(np.float32)/255,cv2.COLOR_RGB2LAB)
+        full_lab=cv2.cvtColor(full.astype(np.float32)/255,cv2.COLOR_RGB2LAB)
+        mild_c=float(np.hypot(mild_lab[:,:,1],mild_lab[:,:,2]).mean())
+        full_c=float(np.hypot(full_lab[:,:,1],full_lab[:,:,2]).mean())
+        self.assertLess(mild_c,full_c)
+        cleaned,green=pipeline.reduce_green_cast(mild)
+        self.assertIn('neutral_a_cast',green)
+        self.assertEqual(cleaned.shape,rgb.shape)
+
     def test_rejects_smaller_embedded_preview(self):
         ok,data=cv2.imencode('.jpg',np.zeros((32,48,3),np.uint8))
         self.assertTrue(ok)
