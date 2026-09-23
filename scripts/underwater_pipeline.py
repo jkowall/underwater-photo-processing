@@ -299,7 +299,7 @@ def reduce_green_cast(rgb, target_white_a=2.2):
 def mild_pre_denoise(rgb, d=5, sigma_color=18.0, sigma_space=4.0):
     """Conservative working-res denoise before neural UIE so the model does not amplify grain.
 
-    Fixed mild bilateral on Lab L only (chroma untouched). ISO-aware scaling is Phase B.
+    Fixed mild bilateral on Lab L only (chroma untouched).
     """
     lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
     diameter = d if d % 2 == 1 else d + 1

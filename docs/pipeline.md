@@ -35,9 +35,16 @@ GPU looks (`spectroformer`, `nu2net`) skip the classical correction chain and ca
 4. Light classical polish (particle cleanup + reduced clarity/vibrance) and
    `reduce_green_cast`.
 
-Classical looks are unchanged. Neural `recipe_id` includes `neural_finish=phase-a-v1`
-so older soft outputs never resume. Phase A was maintainer-approved on 2026-09-23
-after a full Day4 A/B against the prior sharp spectroformer exports.
+Working resolution is long-edge **2048**. Classical looks are unchanged. Neural
+`recipe_id` includes `neural_finish=phase-a-v1` so older soft outputs never
+resume. Phase A was maintainer-approved on 2026-09-23 after a full Day4 A/B
+against the prior sharp spectroformer exports. Phase B (tone/protect) and
+Phase C (4096 tiled `--quality max`) were A/B’d and rejected — Phase A remains
+the shipped finish.
+
+**Deferred:** Phase E sensor-RAW demosaic (vs embedded JPEG) stays an experiment
+for when JPEG-crushed red is the remaining limit. Eval tiling hooks in
+`run_uie_look.py` are research-only.
 
 ## Noise and particulate are different
 

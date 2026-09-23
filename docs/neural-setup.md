@@ -72,6 +72,14 @@ particle/clarity polish → residual green-cast cleanup. Full classical `vivid`
 chroma is not applied on the neural path. Day4 full-batch A/B preferred this
 over the prior sharp spectroformer path.
 
+Tried and rejected vs Phase A: Phase B (ISO denoise / L contrast / protect) and
+Phase C (`--quality max` 4096 tiled). Shipped path stays Phase A at long-edge
+2048. Eval-only tiling remains in `eval/scripts/run_uie_look.py` (`--tile`) for
+experiments.
+
+**Phase E (deferred experiment):** sensor-RAW demosaic instead of embedded JPEG
+when red recovery is the remaining ceiling.
+
 ## Licensing
 
 See [THIRD_PARTY.md](../THIRD_PARTY.md). Do not commit Spectroformer / NU2Net
