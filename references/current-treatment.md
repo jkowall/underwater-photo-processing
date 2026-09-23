@@ -15,8 +15,12 @@ Updated: 2026-09-23. Classical OpenCV recipe notes; CLI default look is separate
   `polish_neural` (particles + reduced clarity/vibrance) → `reduce_green_cast`.
   Classical looks are unchanged. `recipe_id` includes `neural_finish=phase-a-v1`
   so soft/legacy neural PNGs never resume. Maintainer A/B of the full Day4 set
-  (`Day4 onwards-spectroformer` vs `Day4 onwards-spectroformer-phase-a`) preferred
-  Phase A; keep that folder for comparison until Phase B lands.
+  preferred Phase A over the prior sharp spectroformer path. Phase B (ISO denoise
+  + L contrast + protect) and Phase C (4096 tiled) were gate-tested and rejected
+  vs Phase A — keep `phase-a` / `phase-b-gate` / `phase-c-gate-max` folders for
+  comparison only.
+- **Phase E deferred experiment:** LibRaw/sensor demosaic when embedded JPEG red
+  is the ceiling; keep JPEG path as fallback. Not started.
 - **Classical OpenCV default** when using `-Look vivid`: the V4 vivid treatment
   below. Still the approved non-neural recipe for CPU-only or fallback runs.
 

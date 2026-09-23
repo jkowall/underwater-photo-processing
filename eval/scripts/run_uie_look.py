@@ -112,6 +112,83 @@ def infer_spectroformer(
     return Image.fromarray(arr)
 
 
+def _tile_blend_weights(tile: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    """Raised-cosine weights for feathered tile blending (1x1xtilextile)."""
+    yy = torch.linspace(0, 1, tile, device=device, dtype=dtype)
+    xx = torch.linspace(0, 1, tile, device=device, dtype=dtype)
+    wy = 0.5 - 0.5 * torch.cos(torch.pi * yy.clamp(0, 1))
+    wx = 0.5 - 0.5 * torch.cos(torch.pi * xx.clamp(0, 1))
+    return (wy[:, None] * wx[None, :]).view(1, 1, tile, tile)
+
+
+def infer_spectroformer_tiled(
+    model,
+    rgb: Image.Image,
+    device: torch.device,
+    *,
+    tile: int = 1536,
+    overlap: int = 192,
+    multiple: int = 8,
+) -> Image.Image:
+    """Overlapping Spectroformer tiles with feathered blend (VRAM-safe at high long-edge).
+
+    Whole-frame 3072 already OOM'd on RTX 5080; tile size stays near the proven
+    2048 working-res budget. Tile dims are rounded up to ``multiple`` for the net.
+    """
+    w, h = rgb.size
+    tile = max(multiple, int(tile))
+    tile = tile + (multiple - (tile % multiple)) % multiple
+    overlap = max(0, min(int(overlap), tile - multiple))
+    if h <= tile and w <= tile:
+        return infer_spectroformer(model, rgb, device, multiple=multiple)
+
+    transform = T.Compose(
+        [T.ToTensor(), T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+    )
+    inp = transform(rgb).unsqueeze(0).to(device)
+    out = torch.zeros((1, 3, h, w), device=device, dtype=inp.dtype)
+    weight = torch.zeros((1, 1, h, w), device=device, dtype=inp.dtype)
+    base_w = _tile_blend_weights(tile, device, inp.dtype)
+
+    step = max(multiple, tile - overlap)
+    ys = list(range(0, max(h - tile, 0) + 1, step))
+    xs = list(range(0, max(w - tile, 0) + 1, step))
+    if not ys or ys[-1] + tile < h:
+        ys.append(max(0, h - tile))
+    if not xs or xs[-1] + tile < w:
+        xs.append(max(0, w - tile))
+    # de-dupe while preserving order
+    ys = list(dict.fromkeys(ys))
+    xs = list(dict.fromkeys(xs))
+
+    with torch.no_grad():
+        for y in ys:
+            for x in xs:
+                y1, x1 = min(y + tile, h), min(x + tile, w)
+                y0, x0 = y1 - tile, x1 - tile
+                if y0 < 0:
+                    y0, y1 = 0, min(tile, h)
+                if x0 < 0:
+                    x0, x1 = 0, min(tile, w)
+                patch = inp[:, :, y0:y1, x0:x1]
+                ph, pw = patch.shape[-2], patch.shape[-1]
+                pad_h = (multiple - (ph % multiple)) % multiple
+                pad_w = (multiple - (pw % multiple)) % multiple
+                if pad_h or pad_w:
+                    patch = F.pad(patch, (0, pad_w, 0, pad_h), mode="replicate")
+                pred = model(patch)
+                if isinstance(pred, (list, tuple)):
+                    pred = pred[0]
+                pred = ((pred + 1.0) * 0.5).clamp(0, 1)[:, :, :ph, :pw]
+                wgt = base_w[:, :, :ph, :pw]
+                out[:, :, y0:y1, x0:x1] += pred * wgt
+                weight[:, :, y0:y1, x0:x1] += wgt
+
+    merged = out / weight.clamp_min(1e-8)
+    arr = (merged.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
+    return Image.fromarray(arr)
+
+
 def load_nu2net(device: torch.device):
     if not NU2_CKPT.is_file():
         raise FileNotFoundError(f"missing NU2Net weights: {NU2_CKPT}")
@@ -173,6 +250,18 @@ def main() -> int:
         help="Resize so max(w,h)=this before enhance (0=keep source size)",
     )
     ap.add_argument(
+        "--tile",
+        type=int,
+        default=0,
+        help="Spectroformer tile size (0=whole frame). Use with high --long-edge.",
+    )
+    ap.add_argument(
+        "--overlap",
+        type=int,
+        default=192,
+        help="Overlap pixels between Spectroformer tiles when --tile > 0",
+    )
+    ap.add_argument(
         "--device",
         default="auto",
         help="auto (cuda→mps→cpu), or cuda / mps / cpu",
@@ -201,17 +290,22 @@ def main() -> int:
 
     if args.look == "spectroformer":
         model = load_spectroformer(device)
-        infer_fn = infer_spectroformer
     else:
         model = load_nu2net(device)
-        infer_fn = infer_nu2net
 
     for src in images:
         im = Image.open(src).convert("RGB")
         if args.long_edge and args.long_edge > 0:
             im = long_edge_resize(im, args.long_edge)
         work_size = im.size
-        result = infer_fn(model, im, device)
+        if args.look == "spectroformer" and args.tile and args.tile > 0:
+            result = infer_spectroformer_tiled(
+                model, im, device, tile=args.tile, overlap=args.overlap
+            )
+        elif args.look == "spectroformer":
+            result = infer_spectroformer(model, im, device)
+        else:
+            result = infer_nu2net(model, im, device)
         # Always write at the working size passed to infer (caller may upsample later)
         if result.size != work_size:
             result = result.resize(work_size, Image.BICUBIC)
@@ -220,7 +314,8 @@ def main() -> int:
         if device.type == "cuda":
             peak = max(peak, torch.cuda.max_memory_allocated() / 1e9)
             torch.cuda.reset_peak_memory_stats()
-        print(f"OK {src.name} -> {dest} size={result.size}", flush=True)
+        tile_note = f" tile={args.tile}/{args.overlap}" if args.tile else ""
+        print(f"OK {src.name} -> {dest} size={result.size}{tile_note}", flush=True)
 
     wall = time.time() - t0
     print(

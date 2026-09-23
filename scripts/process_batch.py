@@ -254,7 +254,8 @@ def run_neural_native(look: str, rgb_path: Path, out_png: Path) -> str:
             '--look', look,
             '--input', str(rgb_path),
             '--output', str(out_png),
-            '--long-edge', str(NEURAL_LONG_EDGE),
+            # Caller already resized to working long-edge; keep size here.
+            '--long-edge', '0',
             '--device', 'auto',
         ],
         capture_output=True,
@@ -282,7 +283,7 @@ def run_neural_wsl(look: str, rgb_path: Path, out_png: Path) -> str:
         'eval "$(/home/jkowall/micromamba/bin/micromamba shell hook -s bash)" && '
         'micromamba activate uw_eval && '
         f'python "{wsl_runner}" --look {look} --input "{wsl_in}" --output "{wsl_out}" '
-        f'--long-edge {NEURAL_LONG_EDGE} --device auto'
+        f'--long-edge 0 --device auto'
     )
     completed = subprocess.run(
         ['wsl', '-e', 'bash', '-lc', inner],
