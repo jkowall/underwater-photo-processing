@@ -182,7 +182,7 @@ class ResumeTests(unittest.TestCase):
 class CliTests(unittest.TestCase):
     def test_default_output_is_sibling_look_folder(self):
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory)
+            root=Path(directory).resolve()
             src=root/'Day4 onwards';src.mkdir()
             (src/'a.NEF').write_bytes(b'NEF')
             self.assertEqual(runner.default_output_path(src,'vivid'),root/'Day4 onwards-vivid')
